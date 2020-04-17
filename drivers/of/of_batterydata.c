@@ -1,5 +1,4 @@
 /* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -311,9 +310,9 @@ static int64_t of_batterydata_convert_battery_id_kohm(int batt_id_uv,
 	return resistor_value_kohm;
 }
 
-#define	Desay_24Kohm	24
-#define	FMT_200_41Kohm		200
-#define	GY_50Kohm		50
+#define	Desay_24Kohm	24				/* Desay limit + 1Kohm */
+#define	FMT_200_41Kohm		200				/*D1S Default Battery_ID*/
+#define	GY_50Kohm		50				/*E7  Default Battery_ID*/
 struct device_node *of_batterydata_get_best_profile(
 		const struct device_node *batterydata_container_node,
 		const char *psy_name,  const char  *batt_type)
@@ -388,10 +387,10 @@ struct device_node *of_batterydata_get_best_profile(
 				 * and also if the limits are in range
 				 * before selecting the best node.
 				 */
-				if (batt_ids.kohm[i] == FMT_200_41Kohm) {
+				if (batt_ids.kohm[i] == FMT_200_41Kohm) {		/*D1S 一供飞毛腿:41Kohm(默认)  二供光宇:51Kohm*/
 					pr_err("Default_node:FMT_41Kohm.\n");
 					default_node = node;
-				} else if (batt_ids.kohm[i] == GY_50Kohm) {
+				} else if (batt_ids.kohm[i] == GY_50Kohm) {		/*E7 一供光宇:50Kohm(默认)  二供欣旺达:40Kohm  三供德赛:24Kohm*/
 					pr_err("Default_node:GY_50Kohm.\n");
 					default_node = node;
 				}

@@ -2,7 +2,6 @@
  * driver definition for sensor driver
  *
  * Coypright (c) 2017 Goodix
- * Copyright (C) 2018 XiaoMi, Inc.	 
  */
 #ifndef __GF_SPI_H
 #define __GF_SPI_H
@@ -21,10 +20,10 @@ enum FP_MODE{
 #define SUPPORT_NAV_EVENT
 
 #if defined(SUPPORT_NAV_EVENT)
-#define GF_NAV_INPUT_UP			KEY_UP
-#define GF_NAV_INPUT_DOWN		KEY_DOWN
-#define GF_NAV_INPUT_LEFT		KEY_LEFT
-#define GF_NAV_INPUT_RIGHT		KEY_RIGHT
+#define GF_NAV_INPUT_UP			198
+#define GF_NAV_INPUT_DOWN		197
+#define GF_NAV_INPUT_LEFT		195
+#define GF_NAV_INPUT_RIGHT		196
 #define GF_NAV_INPUT_CLICK		KEY_VOLUMEDOWN
 #define GF_NAV_INPUT_DOUBLE_CLICK	KEY_VOLUMEUP
 #define GF_NAV_INPUT_LONG_PRESS		KEY_SEARCH
@@ -79,7 +78,7 @@ struct gf_ioc_chip_info {
 	unsigned char reserved[5];
 };
 
-#define GF_IOC_MAGIC    'g'
+#define GF_IOC_MAGIC    'g'     /* define magic number */
 #define GF_IOC_INIT             _IOR(GF_IOC_MAGIC, 0, uint8_t)
 #define GF_IOC_EXIT             _IO(GF_IOC_MAGIC, 1)
 #define GF_IOC_RESET            _IO(GF_IOC_MAGIC, 2)
@@ -102,10 +101,10 @@ struct gf_ioc_chip_info {
 #define  GF_IOC_MAXNR    14  /* THIS MACRO IS NOT USED NOW... */
 #endif
 
-
+/* #define AP_CONTROL_CLK       1 */
 #define  USE_PLATFORM_BUS     1
-
-
+/* #define  USE_SPI_BUS	1 */
+/* #define GF_FASYNC   1	//If support fasync mechanism. */
 #define GF_NETLINK_ENABLE 1
 #define GF_NET_EVENT_IRQ 1
 #define GF_NET_EVENT_FB_BLACK 2
@@ -139,12 +138,12 @@ struct gf_dev {
 	char device_available;
 	char fb_black;
 
-
+    /* add by zhongshengbin for fingerprint D1S-634 2018-03-04 */
 	char wait_finger_down;
 	struct work_struct work;
 };
 
-int gf_parse_dts(struct gf_dev*gf_dev);
+int gf_parse_dts(struct gf_dev *gf_dev);
 void gf_cleanup(struct gf_dev *gf_dev);
 
 int gf_power_on(struct gf_dev *gf_dev);

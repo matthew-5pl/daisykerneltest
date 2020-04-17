@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+ * Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -153,7 +152,7 @@
 		i2c3 = &i2c_3;
 		i2c5 = &i2c_5;
 		spi3 = &spi_3;
- 	   spi6 = &spi_6;
+		spi6 = &spi_6;
 	};
 
 	soc: soc { };
@@ -749,7 +748,7 @@
 		qcom,master-id = <86>;
 	};
 
-        spi_6: spi@7af6000 { /* BLSP2 QUP2 */
+		spi_6: spi@7af6000 { /* BLSP2 QUP2 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -1255,9 +1254,9 @@
 			reg = <0x10 8>;
 		};
 
-		dload_type@18 {
+		dload_type@1c {
 			compatible = "qcom,msm-imem-dload-type";
-			reg = <0x18 4>;
+			reg = <0x1c 4>;
 		};
 
 		restart_reason@65c {
@@ -2124,6 +2123,7 @@
 		USB3_GDSC-supply = <&gdsc_usb30>;
 		qcom,usb-dbm = <&dbm_1p5>;
 		qcom,msm-bus,name = "usb3";
+		qcom,usbin-vadc = <&pmi8950_vadc>;
 		qcom,msm-bus,num-cases = <3>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,detect-dpdm-floating;

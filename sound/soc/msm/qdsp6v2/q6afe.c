@@ -1,5 +1,5 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+/* Copyright (c) 2012-2017, 2019 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -290,6 +290,15 @@ static int32_t sp_make_afe_callback(uint32_t *payload, uint32_t payload_size)
 	return 0;
 }
 
+static bool afe_token_is_valid(uint32_t token)
+{
+	if (token >= AFE_MAX_PORTS) {
+		pr_err("%s: token %d is invalid.\n", __func__, token);
+		return false;
+	}
+	return true;
+}
+
 static int32_t afe_callback(struct apr_client_data *data, void *priv)
 {
 	if (!data) {
@@ -356,12 +365,20 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 		if (sp_make_afe_callback(data->payload, data->payload_size))
 			return -EINVAL;
 
-		wake_up(&this_afe.wait[data->token]);
+		if (afe_token_is_valid(data->token))
+			wake_up(&this_afe.wait[data->token]);
+		else
+			return -EINVAL;
 	} else if (data->payload_size) {
 		uint32_t *payload;
 		uint16_t port_id = 0;
 		payload = data->payload;
 		if (data->opcode == APR_BASIC_RSP_RESULT) {
+			if (data->payload_size < (2 * sizeof(uint32_t))) {
+				pr_err("%s: Error: size %d is less than expected\n",
+					__func__, data->payload_size);
+				return -EINVAL;
+			}
 			pr_debug("%s:opcode = 0x%x cmd = 0x%x status = 0x%x token=%d\n",
 				__func__, data->opcode,
 				payload[0], payload[1], data->token);
@@ -386,7 +403,10 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			case AFE_PORTS_CMD_DTMF_CTL:
 			case AFE_SVC_CMD_SET_PARAM:
 				atomic_set(&this_afe.state, 0);
-				wake_up(&this_afe.wait[data->token]);
+				if (afe_token_is_valid(data->token))
+					wake_up(&this_afe.wait[data->token]);
+				else
+					return -EINVAL;
 				break;
 			case AFE_SERVICE_CMD_REGISTER_RT_PORT_DRIVER:
 				break;
@@ -398,7 +418,10 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 				break;
 			case AFE_CMD_ADD_TOPOLOGIES:
 				atomic_set(&this_afe.state, 0);
-				wake_up(&this_afe.wait[data->token]);
+				if (afe_token_is_valid(data->token))
+					wake_up(&this_afe.wait[data->token]);
+				else
+					return -EINVAL;
 				pr_debug("%s: AFE_CMD_ADD_TOPOLOGIES cmd 0x%x\n",
 						__func__, payload[1]);
 				break;
@@ -420,7 +443,10 @@ static int32_t afe_callback(struct apr_client_data *data, void *priv)
 			else
 				this_afe.mmap_handle = payload[0];
 			atomic_set(&this_afe.state, 0);
-			wake_up(&this_afe.wait[data->token]);
+			if (afe_token_is_valid(data->token))
+				wake_up(&this_afe.wait[data->token]);
+			else
+				return -EINVAL;
 		} else if (data->opcode == AFE_EVENT_RT_PROXY_PORT_STATUS) {
 			port_id = (uint16_t)(0x0000FFFF & payload[0]);
 		}
@@ -658,7 +684,7 @@ int afe_q6_interface_prepare(void)
 			0xFFFFFFFF, &this_afe);
 		if (this_afe.apr == NULL) {
 			pr_err("%s: Unable to register AFE\n", __func__);
-			ret = -ENODEV;
+			ret = -ENETRESET;
 		}
 		rtac_set_afe_handle(this_afe.apr);
 	}
@@ -1016,29 +1042,29 @@ int afe_dsm_setget_params(uint8_t *payload, int size, int dir, uint32_t dst_port
 	ret = 0;
 
 fail_cmd:
-	pr_debug("%s: status %d 0x%x\n",__func__, ret, dst_port);
+	pr_debug("%s: status %d 0x%x\n", __func__, ret, dst_port);
 
 	this_afe.dsm_payload = NULL;
 
 	return ret;
 }
-
+/* below export to 98928 driver */
 int afe_dsm_ramp_dn_cfg(uint8_t *payload, int delay_in_ms)
 {
 	uint32_t *params = (uint32_t *)payload;
 	*(params)		= 0;
-	*(params + 1)	= 3;
-	*(params + 2)	= 0x03000063;
-	*(params + 3)	= 5;
-	*(params + 4)	= 0x03000064;
-	*(params + 5)	= 5000;
-	*(params + 6)	= 0x03000066;
+	*(params + 1)	= 3;       /* three command will be sent */
+	*(params + 2)	= 0x03000063;     /* fade out time */
+	*(params + 3)	= 5;              /* 5ms */
+	*(params + 4)	= 0x03000064;     /* mute time */
+	*(params + 5)	= 300;/* 5000; // 5s mute time will make sure silence output till PA software shutdown. */
+	*(params + 6)	= 0x03000066;     /* start fade */
 	*(params + 7)	= 1;
 
 	afe_dsm_setget_params(payload, 8*sizeof(uint32_t), 0, DSM_RX_PORT_ID, AFE_MODULE_DSM_RX, AFE_PARAM_ID_DSM_CFG);
 
 	usleep_range(delay_in_ms*1000, delay_in_ms*1000 + 10);
-	return 0;
+    return 0;
 }
 
 int afe_dsm_rx_set_params(uint8_t *payload, int size)
@@ -1051,52 +1077,53 @@ int afe_dsm_rx_get_params(uint8_t *payload, int size)
 	return afe_dsm_setget_params(payload, size, 1, DSM_RX_PORT_ID, AFE_MODULE_DSM_RX, AFE_PARAM_ID_DSM_CFG);
 }
 
-int afe_dsm_set_calib(uint8_t*payload)
+int afe_dsm_set_calib(uint8_t *payload)
 {
 	return afe_dsm_setget_params(payload, sizeof(uint32_t)*3, 0, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_CALIB);
 }
 
-int afe_dsm_pre_calib(uint8_t*payload)
+int afe_dsm_pre_calib(uint8_t *payload)
 {
 	uint32_t *params = (uint32_t *)payload;
 	*(params)		= 0;
-	*(params + 1)	= 1;
-	*(params + 2)	= 0x03000001;
-	*(params + 3)	= 4;
+	*(params + 1)	= 1;               /* count */
+	*(params + 2)	= 0x03000001;     /* enable flag */
+	*(params + 3)	= 4;              /* mode 0: disable, 1: enable, 2: bypass and pilot tone, 4: pilot tone only */
 	afe_dsm_setget_params(payload, 4*sizeof(uint32_t), 0, DSM_RX_PORT_ID, AFE_MODULE_DSM_RX, AFE_PARAM_ID_DSM_CFG);
-	usleep_range(1000*1000, 1000*1000 + 10);
+	usleep_range(1000*1000, 1000*1000 + 10);              /* make the stable iv data */
 	return 0;
 }
 
-int afe_dsm_post_calib(uint8_t*payload)
+int afe_dsm_post_calib(uint8_t *payload)
 {
 	uint32_t *params = (uint32_t *)payload;
 	*(params)		= 0;
-	*(params + 1)	= 1;
-	*(params + 2)	= 0x03000001;
-	*(params + 3)	= 1;
-	return afe_dsm_setget_params(payload, 4*sizeof(uint32_t), 0, DSM_RX_PORT_ID, AFE_MODULE_DSM_RX, AFE_PARAM_ID_DSM_CFG);
+	*(params + 1)	= 1;               /* count */
+	*(params + 2)	= 0x03000001;     /* enable flag */
+	*(params + 3)	= 1;              /* mode 0: disable, 1: enable, 2: bypass and pilot tone, 4: pilot tone only */
+    return afe_dsm_setget_params(payload, 4*sizeof(uint32_t), 0, DSM_RX_PORT_ID, AFE_MODULE_DSM_RX, AFE_PARAM_ID_DSM_CFG);
 }
 
-int afe_dsm_get_calib(uint8_t*payload) {
+int afe_dsm_get_calib(uint8_t *payload)
+{
 	return afe_dsm_setget_params(payload, sizeof(uint32_t)*14, 1, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_CALIB);
 }
 
-int afe_dsm_get_average_calib(uint8_t*payload)
+int afe_dsm_get_average_calib(uint8_t *payload)
 {
 	uint32_t *params = (uint32_t *)payload;
-	uint64_t sum_rdc[2] = {0, 0};
+    uint64_t sum_rdc[2] = {0, 0};
 	int i, rc = 0;
 	for (i = 0; i < 4; i++) {
-		 rc = afe_dsm_setget_params(payload, sizeof(uint32_t)*14, 1, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_CALIB);
-		 if (rc != 0) {
+		rc = afe_dsm_setget_params(payload, sizeof(uint32_t)*14, 1, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_CALIB);
+		if (rc != 0) {
 			sum_rdc[0] = 0;
 			sum_rdc[1] = 0;
 			goto failed;
-		 }
-		 sum_rdc[0] += params[0];
-		 sum_rdc[1] += params[1];
-		 usleep_range(50*1000, 50*1000 + 10);
+		}
+		sum_rdc[0] += params[0];
+		sum_rdc[1] += params[1];
+		usleep_range(50*1000, 50*1000 + 10);
 	}
 
 failed:
@@ -1105,9 +1132,9 @@ failed:
 	return rc;
 }
 
-int afe_dsm_get_libary_info(uint32_t*payload, int size)
+int afe_dsm_get_libary_info(uint32_t *payload, int size)
 {
-	return afe_dsm_setget_params((int8_t*)payload, 4*100, 1, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_DSM_INFO);
+    return afe_dsm_setget_params((int8_t *)payload, 4*100, 1, DSM_TX_PORT_ID, AFE_MODULE_DSM_TX, AFE_PARAM_ID_DSM_INFO);
 }
 
 #endif
@@ -1366,6 +1393,7 @@ static int afe_send_hw_delay(u16 port_id, u32 rate)
 
 	pr_debug("%s:\n", __func__);
 
+	memset(&delay_entry, 0, sizeof(delay_entry));
 	delay_entry.sample_rate = rate;
 	if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_TX)
 		ret = afe_get_cal_hw_delay(TX_DEVICE, &delay_entry);

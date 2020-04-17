@@ -1,5 +1,4 @@
 /* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,8 +29,8 @@
 #include <linux/leds-qpnp-flash.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
-#include <linux/string.h>
 #include "leds.h"
+
 #define FLASH_LED_PERIPHERAL_SUBTYPE(base)			(base + 0x05)
 #define FLASH_SAFETY_TIMER(base)				(base + 0x40)
 #define FLASH_MAX_CURRENT(base)					(base + 0x41)
@@ -173,10 +172,10 @@ struct flash_regulator_data {
 	const char		*reg_name;
 	u32			max_volt_uv;
 };
-#ifdef CONFIG_FLASHLIGHT_SAKURA
-char flashlight[] = {"flashlight"};
-char flashlight_switch[] = {"led:switch"};
-struct led_trigger *flashlight_switch_trigger = NULL;
+#ifdef CONFIG_FLASHLIGHT_DAISY
+char flashlight[]={"flashlight"};
+char flashlight_switch[]={"led:switch"};
+struct led_trigger *flashlight_switch_trigger=NULL;
 #endif
 /*
  * Configurations for each individual LED
@@ -1312,7 +1311,7 @@ static void qpnp_flash_led_work(struct work_struct *work)
 	int max_curr_avail_ma = 0;
 	int total_curr_ma = 0;
 	int i;
-	u8 val;
+	u8 val = 0;
 
 	/* Global lock is to synchronize between the flash leds and torch */
 	mutex_lock(&led->flash_led_lock);
@@ -1324,8 +1323,30 @@ static void qpnp_flash_led_work(struct work_struct *work)
 		goto turn_off;
 
 	if (led->open_fault) {
-		dev_err(&led->spmi_dev->dev, "Open fault detected\n");
-		goto unlock_mutex;
+		if (flash_node->type == FLASH) {
+			dev_dbg(&led->spmi_dev->dev, "Open fault detected\n");
+			goto unlock_mutex;
+		}
+		/*
+		 * Checking LED fault status again if open_fault has been
+		 * detected previously. Update open_fault status then the
+		 * flash leds could be controlled again if the hardware
+		 * status is recovered.
+		 */
+		rc = spmi_ext_register_readl(led->spmi_dev->ctrl,
+			led->spmi_dev->sid,
+			FLASH_LED_FAULT_STATUS(led->base), &val, 1);
+		if (rc) {
+			dev_err(&led->spmi_dev->dev,
+				"Failed to read out fault status register\n");
+			goto unlock_mutex;
+		}
+
+		led->open_fault = (val & FLASH_LED_OPEN_FAULT_DETECTED);
+		if (led->open_fault) {
+			dev_err(&led->spmi_dev->dev, "Open fault detected\n");
+			goto unlock_mutex;
+		}
 	}
 
 	if (!flash_node->flash_on && flash_node->num_regulators > 0) {
@@ -1825,7 +1846,7 @@ turn_off:
 			goto exit_flash_led_work;
 		}
 
-		led->open_fault |= (val & FLASH_LED_OPEN_FAULT_DETECTED);
+		led->open_fault = (val & FLASH_LED_OPEN_FAULT_DETECTED);
 	}
 
 	rc = qpnp_led_masked_write(led->spmi_dev,
@@ -1955,7 +1976,8 @@ static void qpnp_flash_led_brightness_set(struct led_classdev *led_cdev,
 
 	return;
 }
-#ifdef CONFIG_FLASHLIGHT_SAKURA
+#ifdef CONFIG_FLASHLIGHT_DAISY
+/* lancelot add for mi flashlight*/
 static void mido_flash_led_brightness_set(struct led_classdev *led_cdev,
 						enum led_brightness value)
 {
@@ -1963,6 +1985,7 @@ static void mido_flash_led_brightness_set(struct led_classdev *led_cdev,
 	qpnp_flash_led_brightness_set(led_cdev,value);
 	led_trigger_event(flashlight_switch_trigger,(value?1:0));
 }
+/* lancelot add end*/
 #endif
 static int qpnp_flash_led_init_settings(struct qpnp_flash_led *led)
 {
@@ -2626,8 +2649,9 @@ static int qpnp_flash_led_probe(struct spmi_device *spmi)
 					"Unable to read flash name\n");
 			return rc;
 		}
-#ifdef CONFIG_FLASHLIGHT_SAKURA
-		if (!strncmp(led->flash_node[i].cdev.name,flashlight,strlen(flashlight))) {
+#ifdef CONFIG_FLASHLIGHT_DAISY
+		if( !strncmp(led->flash_node[i].cdev.name,flashlight,strlen(flashlight)) ) //flashlight
+		{
 			led->flash_node[i].cdev.brightness_set = mido_flash_led_brightness_set;
 		}
 #endif
@@ -2656,9 +2680,10 @@ static int qpnp_flash_led_probe(struct spmi_device *spmi)
 			dev_err(&spmi->dev, "Unable to register led\n");
 			goto error_led_register;
 		}
-#ifdef CONFIG_FLASHLIGHT_SAKURA
-		if (!strncmp(led->flash_node[i].cdev.name,flashlight_switch,strlen(flashlight_switch))) {
-			flashlight_switch_trigger = led->flash_node[i].cdev.trigger;
+#ifdef CONFIG_FLASHLIGHT_DAISY
+		if( !strncmp(led->flash_node[i].cdev.name,flashlight_switch,strlen(flashlight_switch)) ) //flashlight
+		{
+			flashlight_switch_trigger=led->flash_node[i].cdev.trigger;
 		}
 #endif
 		led->flash_node[i].cdev.dev->of_node = temp;

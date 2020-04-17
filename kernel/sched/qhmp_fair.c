@@ -5026,8 +5026,8 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	/*
-	* Update depth before it can be picked as next sched entity.
-	*/
+	 * Update depth before it can be picked as next sched entity.
+	 */
 	se->depth = se->parent ? se->parent->depth + 1 : 0;
 #endif
 

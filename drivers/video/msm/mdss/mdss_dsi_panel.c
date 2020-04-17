@@ -1,5 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+/* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -10,7 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
 
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -26,6 +24,7 @@
 #include <linux/string.h>
 
 #include "mdss_dsi.h"
+#include "mdss_debug.h"
 #ifdef TARGET_HW_MDSS_HDMI
 #include "mdss_dba_utils.h"
 #endif
@@ -38,12 +37,12 @@
 /* test - start */
 extern char panel_name[MDSS_MAX_PANEL_LEN];
 
-struct mdss_dsi_ctrl_pdata *change_par_ctrl ;
+extern struct mdss_dsi_ctrl_pdata *change_par_ctrl ;
 int change_par_buf;
 #ifdef CONFIG_PROJECT_VINCE
-int LCM_effect[4] = {0x2,0xf0,0xf00,0xf000};
+int LCM_effect[4] = {0x2, 0xf0, 0xf00, 0xf000};
 #else
-int LCM_effect[3] = {0x2,0xf0,0xf00};
+int LCM_effect[3] = {0x2, 0xf0, 0xf00};
 #endif
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
@@ -265,11 +264,12 @@ static void mdss_dsi_panel_set_idle_mode(struct mdss_panel_data *pdata,
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 						panel_data);
 
-	pr_debug("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
+	pr_info("%s: Idle (%d->%d)\n", __func__, ctrl->idle, enable);
 
 	if (ctrl->idle == enable)
 		return;
 
+	MDSS_XLOG(ctrl->idle, enable);
 	if (enable) {
 		if (ctrl->idle_on_cmds.cmd_cnt) {
 			mdss_dsi_panel_cmds_send(ctrl, &ctrl->idle_on_cmds,
@@ -320,6 +320,7 @@ static int mdss_dsi_request_gpios(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			rc);
 		goto rst_gpio_err;
 	}
+
 	if (gpio_is_valid(ctrl_pdata->bklt_en_gpio)) {
 		rc = gpio_request(ctrl_pdata->bklt_en_gpio,
 						"bklt_enable");
@@ -439,6 +440,8 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 						__func__);
 					goto exit;
 				}
+				gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+				usleep_range(100, 110);
 			}
 
 			if (pdata->panel_info.rst_seq_len) {
@@ -485,9 +488,9 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			}
 		}
 	if (enable)
-		printk("lcm %s  enable out\n", __func__);
+	printk("lcm %s  enable out\n", __func__);
 	else
-		printk("lcm %s  disable out\n", __func__);
+	printk("lcm %s  disable out\n", __func__);
 		if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
 			pr_debug("%s: Panel Not properly turned OFF\n",
 						__func__);
@@ -501,9 +504,11 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 		}
 		if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
+			usleep_range(100, 110);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
 	#ifdef CONFIG_PROJECT_VINCE
+		/* Pull down the reset pin before shutdown or reboot */
 		if (pullDownReset) {
 			pr_err("%s: pull down reset pin\n", __func__);
 			gpio_set_value((ctrl_pdata->rst_gpio), 0);
@@ -892,8 +897,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	struct dsi_panel_cmds *CE_off_cmds_point;
 	struct dsi_panel_cmds *cold_gamma_cmds_point;
 	struct dsi_panel_cmds *warm_gamma_cmds_point;
-	struct dsi_panel_cmds *default_gamma_cmds_point;
-	struct dsi_panel_cmds *white_gamma_cmds_point;
+	struct dsi_panel_cmds *default_gamma_cmds_point;/* gamma 0 */
+	struct dsi_panel_cmds *white_gamma_cmds_point;/* white gamma */
 	struct dsi_panel_cmds *PM1_cmds_point;
 	struct dsi_panel_cmds *PM2_cmds_point;
 	struct dsi_panel_cmds *PM3_cmds_point;
@@ -922,6 +927,7 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+
 	on_cmds = &ctrl->on_cmds;
 
 	if ((pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE) &&
@@ -934,14 +940,19 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (on_cmds->cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, on_cmds, CMD_REQ_COMMIT);
 
+	if (!change_par_ctrl) {
+		pr_err("%s: change_par_ctrl is NULL, change lcm effect failed\n", __func__);
+		return 0;
+	}
+
 	CABC_on_cmds_point = &change_par_ctrl->CABC_on_cmds;
 	CABC_off_cmds_point = &change_par_ctrl->CABC_off_cmds;
 	CE_on_cmds_point = &change_par_ctrl->CE_on_cmds;
 	CE_off_cmds_point = &change_par_ctrl->CE_off_cmds;
 	cold_gamma_cmds_point = &change_par_ctrl->cold_gamma_cmds;
 	warm_gamma_cmds_point = &change_par_ctrl->warm_gamma_cmds;
-	default_gamma_cmds_point = &change_par_ctrl->default_gamma_cmds;
-	white_gamma_cmds_point = &change_par_ctrl->white_gamma_cmds;
+	default_gamma_cmds_point = &change_par_ctrl->default_gamma_cmds;/* gamma0 */
+	white_gamma_cmds_point = &change_par_ctrl->white_gamma_cmds;/* white gamma */
 	PM1_cmds_point = &change_par_ctrl->PM1_cmds;
 	PM2_cmds_point = &change_par_ctrl->PM2_cmds;
 	PM3_cmds_point = &change_par_ctrl->PM3_cmds;
@@ -955,21 +966,21 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	sRGB_off_cmds_point = &change_par_ctrl->sRGB_off_cmds;
 #endif
 	printk("lcm %s  send effect cmds\n", __func__);
-	switch(LCM_effect[0]) {
+	switch (LCM_effect[0]) {
 	case 0x0001:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, warm_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0001 : wram_gamma for test; */
 	case 0x0002:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, default_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0002 : default_gamma for test; */
 	case 0x0003:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, cold_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0003 : cold_gamma for test; */
 	case 0x0004:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, white_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0004 : white_gamma for test; */
 	case 0x0006:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, PM1_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, PM1_cmds_point, CMD_REQ_COMMIT); break;  /* Protect mode 1~8 */
 	case 0x0007:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, PM2_cmds_point, CMD_REQ_COMMIT); break;
 	case 0x0008:
@@ -987,69 +998,69 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	}
 	if (LCM_effect[1] == 0x0010) {
 		#ifdef CONFIG_PROJECT_VINCE
-		switch(LCM_effect[3]) {
-			case 0x1000:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break;
-			case 0xf000:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break;
+		switch (LCM_effect[3]) {
+		case 0x1000:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x1000 : sRGB_on; */
+		case 0xf000:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break; /* 0xf000 : sRGB_off; */
 		}
 		#endif
-		switch(LCM_effect[1]) {
-			case 0x0010:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break;
-			case 0x00f0:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break;
+		switch (LCM_effect[1]) {
+		case 0x0010:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0010 : CE_ON; */
+		case 0x00f0:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x00f0 : CE_OFF; */
 		}
-		switch(LCM_effect[2]) {
-			case 0x0100:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break;
-			case 0x0f00:
-				mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break;
+		switch (LCM_effect[2]) {
+		case 0x0100:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0100 : CABC_on; */
+		case 0x0f00:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x0f00 : CABC_off; */
 		}
 	}
 	#ifdef CONFIG_PROJECT_VINCE
 	else if (LCM_effect[3] == 0x1000) {
-		switch(LCM_effect[1]) {
+		switch (LCM_effect[1]) {
 		case 0x0010:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0010 : CE_ON; */
 		case 0x00f0:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break;
-	}
-	switch(LCM_effect[2]) {
-	case 0x0100:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break;
-	case 0x0f00:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break;
-	}
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x00f0 : CE_OFF; */
+		}
+		switch (LCM_effect[2]) {
+		case 0x0100:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0100 : CABC_on; */
+		case 0x0f00:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x0f00 : CABC_off; */
+		}
 
-	switch(LCM_effect[3]) {
-	case 0x1000:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break;
-	case 0xf000:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break;
-	}
+		switch (LCM_effect[3]) {
+		case 0x1000:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x1000 : sRGB_on; */
+		case 0xf000:
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break; /* 0xf000 : sRGB_off; */
+		}
 	}
 	#endif
 	else{
-		switch(LCM_effect[1]) {
+		switch (LCM_effect[1]) {
 		case 0x0010:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0010 : CE_ON; */
 		case 0x00f0:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x00f0 : CE_OFF; */
 		}
 
-		switch(LCM_effect[2]) {
+		switch (LCM_effect[2]) {
 		case 0x0100:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0100 : CABC_on; */
 		case 0x0f00:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x0f00 : CABC_off; */
 		}
 		#ifdef CONFIG_PROJECT_VINCE
-		switch(LCM_effect[3]) {
+		switch (LCM_effect[3]) {
 		case 0x1000:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x1000 : sRGB_on; */
 		case 0xf000:
-			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break;
+			mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break; /* 0xf000 : sRGB_off; */
 		}
 		#endif
 	}
@@ -1143,7 +1154,6 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 {
 	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
 	struct mdss_panel_info *pinfo;
-
 
 	if (pdata == NULL) {
 		pr_err("%s: Invalid input data\n", __func__);
@@ -1865,9 +1875,8 @@ static bool mdss_dsi_cmp_panel_reg_v2(struct mdss_dsi_ctrl_pdata *ctrl)
 	for (j = 0; j < ctrl->groups; ++j) {
 		for (i = 0; i < len; ++i) {
 			if (ctrl->return_buf[i] !=
-				ctrl->status_value[group + i])
-				{
-					printk("%s: lcm esd error return_buf[%d] = %x,status_value[%d] = %x\n",__func__,i,ctrl->return_buf[i],i,ctrl->status_value[i]);
+				ctrl->status_value[group + i]) {
+					printk("%s: lcm esd error return_buf[%d] = %x,status_value[%d] = %x\n", __func__, i, ctrl->return_buf[i], i, ctrl->status_value[i]);
 					break;
 				}
 		}
@@ -2120,9 +2129,11 @@ static void mdss_dsi_parse_esd_params(struct device_node *np,
 	if ((ctrl->status_mode == ESD_BTA) || (ctrl->status_mode == ESD_TE) ||
 			(ctrl->status_mode == ESD_MAX))
 		return;
+
 	mdss_dsi_parse_dcs_cmds(np, &ctrl->status_cmds,
 			"qcom,mdss-dsi-panel-status-command",
 				"qcom,mdss-dsi-panel-status-command-state");
+
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-panel-max-error-count",
 		&tmp);
 	ctrl->max_status_error_count = (!rc ? tmp : 0);
@@ -2633,15 +2644,15 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 	mdss_dsi_parse_roi_alignment(np, pt);
 
 #ifdef CONFIG_PROJECT_VINCE
-	sprintf(dsi_on_num, "%02d", white_point_num);
-	strcat(dsi_on_str, dsi_on_num);
-	strcat(dsi_on_str, "\0");
+	snprintf(dsi_on_num, sizeof(dsi_on_num), "%02d", white_point_num);
+	strlcat(dsi_on_str, dsi_on_num, sizeof(dsi_on_str));
+	strlcat(dsi_on_str, "\0", sizeof(dsi_on_str));
 
 	if (white_point_num) {
 		pr_err("[white point calibration] dsi_on_command = %s", dsi_on_str);
 		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
 			dsi_on_str, "qcom,mdss-dsi-on-command-state");
-	} else{
+	} else {
 		mdss_dsi_parse_dcs_cmds(np, &pt->on_cmds,
 			"qcom,mdss-dsi-on-command",
 			"qcom,mdss-dsi-on-command-state");
@@ -3021,10 +3032,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->default_gamma_cmds,
 		"qcom,mdss-dsi-default_gamma-command", "qcom,mdss-dsi-default_gamma-command-state");
 #ifdef CONFIG_PROJECT_VINCE
-	sprintf(dsi_white_num, "%02d", white_point_num);
-	strcat(dsi_white_str, dsi_white_num);
-	strcat(dsi_white_str, "\0");
-	printk("sxf white_point_num = %d\n",white_point_num);
+	snprintf(dsi_white_num, sizeof(dsi_white_num), "%02d", white_point_num);
+	strlcat(dsi_white_str, dsi_white_num, sizeof(dsi_white_str));
+	strlcat(dsi_white_str, "\0", sizeof(dsi_white_str));
+	printk("sxf white_point_num = %d\n", white_point_num);
 	printk("[white point calibration] sxf dsi_white_command = %s", dsi_white_str);
 		mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->white_gamma_cmds,
 			dsi_white_str, "qcom,mdss-white-command-state");

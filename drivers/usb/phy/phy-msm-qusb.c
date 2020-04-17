@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+ * Copyright (c) 2014-2017,2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -908,7 +907,7 @@ static void qusb_phy_shutdown(struct usb_phy *phy)
 
 int qusb_phy_dumpreg(struct usb_phy *phy)
 {
-	struct qusb_phy *qphy = container_of(phy, struct qusb_phy,phy);
+	struct qusb_phy *qphy=container_of(phy, struct qusb_phy,phy);
 	pr_debug("%s:dump_phy_registers\n", __func__);
 	pr_debug("PORT_PWRDWN:%08x\n",readl_relaxed(qphy->base+ QUSB2PHY_PORT_POWERDOWN));
 	pr_debug("UTMCTL1:%08x\n",readl_relaxed(qphy->base + QUSB2PHY_PORT_UTMI_CTRL1));
@@ -922,7 +921,7 @@ int qusb_phy_dumpreg(struct usb_phy *phy)
 
 int qusb_phy_run_dcd(struct usb_phy *phy)
 {
-	struct qusb_phy *qphy = container_of(phy, struct qusb_phy,phy);
+	struct qusb_phy *qphy=container_of(phy, struct qusb_phy,phy);
 
 	u8 int_status;
 
@@ -946,7 +945,7 @@ int qusb_phy_run_dcd(struct usb_phy *phy)
 	usleep_range(1000, 2000);
 	int_status = readl_relaxed(qphy->base+ QUSB2PHY_PORT_INT_STATUS);
 	qusb_phy_dumpreg(phy);
-	writel_relaxed(CLAMP_N_EN | FREEZIO_N | POWER_DOWN,qphy->base+ QUSB2PHY_PORT_POWERDOWN);
+	writel_relaxed(CLAMP_N_EN | FREEZIO_N | POWER_DOWN,qphy->base+ QUSB2PHY_PORT_POWERDOWN); 
 	/*23*/
 	writel_relaxed(0x95,qphy->base+ QUSB2PHY_PLL_AUTOPGM_CTL1);
 	writel_relaxed(0x80,qphy->base+ QUSB2PHY_PORT_UTMI_CTRL2);
@@ -1112,7 +1111,12 @@ static int qusb_phy_set_suspend(struct usb_phy *phy, int suspend)
 			/* Make sure that above write is completed */
 			wmb();
 
-			qusb_phy_enable_clocks(qphy, false);
+			/* Do not disable clocks if there is vote for it */
+			if (!qphy->rm_pulldown)
+				qusb_phy_enable_clocks(qphy, false);
+			else
+				dev_dbg(phy->dev, "race with rm_pulldown. Keep clocks ON\n");
+
 			qusb_phy_update_tcsr_level_shifter(qphy, 0x0);
 			/* Do not disable power rails if there is vote for it */
 			if (!qphy->rm_pulldown)

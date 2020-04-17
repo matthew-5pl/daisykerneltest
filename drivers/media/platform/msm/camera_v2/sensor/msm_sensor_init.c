@@ -57,7 +57,7 @@ static int msm_sensor_wait_for_probe_done(struct msm_sensor_init_t *s_init)
 	#else
 	tm = 0;
 	 wait_event(s_init->state_wait,
-			 (s_init->module_init_status == 1));
+						 (s_init->module_init_status == 1)); 
 	#endif
 	return rc;
 }

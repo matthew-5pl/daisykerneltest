@@ -3,7 +3,7 @@
 #
 
 config TOUCHSCREEN_FT5446
-	    bool "Focaltech Touchscreen"
+        bool "Focaltech Touchscreen"
 		depends on I2C
 		default n
 		help
@@ -11,6 +11,6 @@ config TOUCHSCREEN_FT5446
 		  If unsure, say N.
 
 config TOUCHSCREEN_FTS_DIRECTORY
-	string "Focaltech ts directory name"
-	default "focaltech_touch"
-	depends on TOUCHSCREEN_FTS
+    string "Focaltech ts directory name"
+    default "focaltech_touch"
+    depends on TOUCHSCREEN_FTS

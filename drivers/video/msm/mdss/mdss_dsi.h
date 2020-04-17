@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -730,12 +729,13 @@ static inline const char *__mdss_dsi_pm_supply_node_name(
 }
 
 #ifdef CONFIG_PROJECT_VINCE
+/*Add by HQ-zmc [Date: 2017-12-18 11:02:02]*/
 struct NVT_CSOT_ESD{
-	bool nova_csot_panel;
-	bool ESD_TE_status;
+	bool nova_csot_panel;	/* false : not delay, true : delay(nt36672) */
+	bool ESD_TE_status;		/* false : TE signal OK, true : TE signal not detected(nt36672) */
 };
 
-struct NVT_CSOT_ESD*get_nvt_csot_esd_status(void);
+struct NVT_CSOT_ESD *get_nvt_csot_esd_status(void);
 #endif
 
 void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,

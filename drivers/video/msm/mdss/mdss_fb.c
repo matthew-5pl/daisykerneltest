@@ -2,8 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+ * Copyright (c) 2008-2019, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -15,8 +14,8 @@
  * GNU General Public License for more details.
  */
 
-
-
+/* modified by zhongshengbin for fingerprint D1S-634  2018-03-04 */
+/* #define pr_fmt(fmt)	"%s: " fmt, __func__ */
 
 #include <linux/videodev2.h>
 #include <linux/bootmem.h>
@@ -60,7 +59,6 @@
 #include "mdss_mdp.h"
 #include "mdss_dsi.h"
 #include "mdp3_ctrl.h"
-
 extern struct mdss_dsi_ctrl_pdata *change_par_ctrl ;
 extern int change_par_buf;
 #ifdef CONFIG_PROJECT_VINCE
@@ -145,7 +143,7 @@ static int mdss_fb_send_panel_event(struct msm_fb_data_type *mfd,
 static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd,
 		int type);
 
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 #define WAIT_RESUME_TIMEOUT 200
 struct fb_info *prim_fbi;
 static struct delayed_work prim_panel_work;
@@ -164,7 +162,7 @@ static void prim_panel_off_delayed_work(struct work_struct *work)
 	}
 	printk("linson prim_panel_off_delayed_work close FB\n");
 	if (atomic_read(&prim_panel_is_on)) {
-	printk("linson2 prim_panel_is_on = %d \n",atomic_read(&prim_panel_is_on));
+	printk("linson2 prim_panel_is_on = %d \n", atomic_read(&prim_panel_is_on));
 		fb_blank(prim_fbi, FB_BLANK_POWERDOWN);
 		atomic_set(&prim_panel_is_on, false);
 		wake_unlock(&prim_panel_wakelock);
@@ -175,7 +173,7 @@ static void prim_panel_off_delayed_work(struct work_struct *work)
 	console_unlock();
 #endif
 }
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 void mdss_fb_no_update_notify_timer_cb(unsigned long data)
 {
@@ -398,6 +396,9 @@ static ssize_t mdss_fb_get_type(struct device *dev,
 		break;
 	case EDP_PANEL:
 		ret = snprintf(buf, PAGE_SIZE, "edp panel\n");
+		break;
+	case SPI_PANEL:
+		ret = snprintf(buf, PAGE_SIZE, "spi panel\n");
 		break;
 	default:
 		ret = snprintf(buf, PAGE_SIZE, "unknown panel\n");
@@ -829,8 +830,12 @@ static ssize_t mdss_fb_change_dispparam(struct device *dev,
 	struct dsi_panel_cmds *sRGB_off_cmds_point;
 #endif
 
-	sscanf(buf, "%x", &change_par_buf) ;
+    sscanf(buf, "%x", &change_par_buf) ;
 
+	if (!change_par_ctrl) {
+		pr_err("%s: change_par_ctrl is NULL, change lcm effect failed\n", __func__);
+		return 0;
+	}
 	CABC_on_cmds_point = &change_par_ctrl->CABC_on_cmds;
 	CABC_off_cmds_point = &change_par_ctrl->CABC_off_cmds;
 	CE_on_cmds_point = &change_par_ctrl->CE_on_cmds;
@@ -838,7 +843,7 @@ static ssize_t mdss_fb_change_dispparam(struct device *dev,
 	cold_gamma_cmds_point = &change_par_ctrl->cold_gamma_cmds;
 	warm_gamma_cmds_point = &change_par_ctrl->warm_gamma_cmds;
 	default_gamma_cmds_point = &change_par_ctrl->default_gamma_cmds;
-	white_gamma_cmds_point = &change_par_ctrl->white_gamma_cmds;
+	white_gamma_cmds_point = &change_par_ctrl->white_gamma_cmds;/* white gamma */
 	PM1_cmds_point = &change_par_ctrl->PM1_cmds;
 	PM2_cmds_point = &change_par_ctrl->PM2_cmds;
 	PM3_cmds_point = &change_par_ctrl->PM3_cmds;
@@ -851,36 +856,35 @@ static ssize_t mdss_fb_change_dispparam(struct device *dev,
 	sRGB_on_cmds_point = &change_par_ctrl->sRGB_on_cmds;
 	sRGB_off_cmds_point = &change_par_ctrl->sRGB_off_cmds;
 #endif
-
 	if ((change_par_buf >= 0x01) && (change_par_buf <= 0x0c)) {
-		LCM_effect[0] = change_par_buf;
+		LCM_effect[0] = change_par_buf;  /* gamma mode & PM mode */
 	} else if ((change_par_buf == 0x10) || (change_par_buf == 0xf0)) {
-		LCM_effect[1] = change_par_buf;
+		LCM_effect[1] = change_par_buf;  /* CE mode */
 	} else if ((change_par_buf == 0x100) || (change_par_buf == 0xf00)) {
-		LCM_effect[2] = change_par_buf;
+		LCM_effect[2] = change_par_buf;  /* CABC mode */
 	}
 	#ifdef CONFIG_PROJECT_VINCE
 	else if ((change_par_buf == 0x1000) || (change_par_buf == 0xf000)) {
-		LCM_effect[3] = change_par_buf;
+		LCM_effect[3] = change_par_buf;  /* sRGB mode */
 	}
 	#endif
 
 	printk("mdss_fb_change_dispparam: mode=%x\n", change_par_buf);
-	switch(change_par_buf) {
+	switch (change_par_buf) {
 	case 0x0001:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, warm_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0001 : wram_gamma for test; */
 	case 0x0002:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, default_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0002 : default_gamma for test; */
 	case 0x0003:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, cold_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0003 : cold_gamma for test; */
 	case 0x0004:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, white_gamma_cmds_point, CMD_REQ_COMMIT);
-		break;
+		break; /* 0x0004 : white_gamma for test; */
 	case 0x0006:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, PM1_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, PM1_cmds_point, CMD_REQ_COMMIT); break;  /* Protect mode 1~8 */
 	case 0x0007:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, PM2_cmds_point, CMD_REQ_COMMIT); break;
 	case 0x0008:
@@ -896,22 +900,22 @@ static ssize_t mdss_fb_change_dispparam(struct device *dev,
 	case 0x0005:
 		mdss_dsi_panel_cmds_send(change_par_ctrl, PM8_cmds_point, CMD_REQ_COMMIT); break;
 	case 0x0010:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, CE_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0010 : CE_ON; */
 	case 0x00f0:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, CE_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x00f0 : CE_OFF; */
 	case 0x0100:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x0100 : CABC_on; */
 	case 0x0f00:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, CABC_off_cmds_point, CMD_REQ_COMMIT); break; /* 0x0f00 : CABC_off; */
 	#ifdef CONFIG_PROJECT_VINCE
 	case 0x1000:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_on_cmds_point, CMD_REQ_COMMIT); break; /* 0x1000 : sRGB_on; */
 	case 0xf000:
-		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break;
+		mdss_dsi_panel_cmds_send(change_par_ctrl, sRGB_off_cmds_point, CMD_REQ_COMMIT); break; /* 0xf000 : sRGB_off; */
 	#endif
 	}
 
-       return len;
+	return len;
 }
 
 static ssize_t mdss_fb_get_dispparam(struct device *dev,
@@ -921,10 +925,10 @@ static ssize_t mdss_fb_get_dispparam(struct device *dev,
 	int ret;
 	#ifdef CONFIG_PROJECT_VINCE
 	ret = scnprintf(buf, PAGE_SIZE, "%x%x%x%x\n",
-		LCM_effect[0] , LCM_effect[1] ,LCM_effect[2] , LCM_effect[3]);
+		LCM_effect[0], LCM_effect[1], LCM_effect[2], LCM_effect[3]);  /* LCM_effect[0]=0x%x LCM_effect[1]=0x%x LCM_effect[2]=0x%x LCM_effect[3]=0x%x */
 	#else
 	ret = scnprintf(buf, PAGE_SIZE, "%x%x%x\n",
-		LCM_effect[0] , LCM_effect[1] ,LCM_effect[2]);
+		LCM_effect[0], LCM_effect[1], LCM_effect[2]);  /* LCM_effect[0]=0x%x LCM_effect[1]=0x%x LCM_effect[2]=0x%x */
 	#endif
 	return ret;
 }
@@ -941,7 +945,7 @@ static ssize_t mdss_fb_set_wpoint(struct device *dev,
 		sscanf(buf, "%3d", &white_point_num_y) ;
 		set_white_point_x = true;
 	}
-		return len;
+       return len;
 }
 static ssize_t mdss_fb_get_wpoint(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -954,8 +958,8 @@ static ssize_t mdss_fb_get_wpoint(struct device *dev,
 static ssize_t mdss_fb_set_rpoint(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
-	sscanf(buf, "%6d", &white_point_num_r) ;
-		return len;
+	sscanf(buf, "%6d", &white_point_num_r);
+       return len;
 }
 static ssize_t mdss_fb_get_rpoint(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -969,7 +973,7 @@ static ssize_t mdss_fb_set_gpoint(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
 	sscanf(buf, "%6d", &white_point_num_g) ;
-		return len;
+       return len;
 }
 static ssize_t mdss_fb_get_gpoint(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -983,7 +987,7 @@ static ssize_t mdss_fb_set_bpoint(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t len)
 {
 	sscanf(buf, "%6d", &white_point_num_b) ;
-		return len;
+       return len;
 }
 static ssize_t mdss_fb_get_bpoint(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1206,6 +1210,9 @@ static void mdss_fb_remove_sysfs(struct msm_fb_data_type *mfd)
 static void mdss_fb_shutdown(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
+
+	if (!mfd)
+		return;
 
 	mfd->shutdown_pending = true;
 
@@ -1458,13 +1465,14 @@ static int mdss_fb_init_panel_modes(struct msm_fb_data_type *mfd,
 	return 0;
 }
 
-static int ffbm_first_close_bl = false;
+static int ffbm_first_close_bl;
 static int mdss_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd = NULL;
 	struct mdss_panel_data *pdata;
 	struct fb_info *fbi;
 	int rc;
+	const char *data;
 
 	if (fbi_list_index >= MAX_FBI_LIST)
 		return -ENOMEM;
@@ -1513,6 +1521,21 @@ static int mdss_fb_probe(struct platform_device *pdev)
 
 	mfd->pdev = pdev;
 
+	if (mfd->panel.type == SPI_PANEL)
+		mfd->fb_imgType = MDP_RGB_565;
+	if (mfd->panel.type == MIPI_VIDEO_PANEL || mfd->panel.type ==
+		MIPI_CMD_PANEL || mfd->panel.type == SPI_PANEL){
+		rc = of_property_read_string(pdev->dev.of_node,
+			"qcom,mdss-fb-format", &data);
+		if (!rc) {
+			if (!strcmp(data, "rgb888"))
+				mfd->fb_imgType = MDP_RGB_888;
+			else if (!strcmp(data, "rgb565"))
+				mfd->fb_imgType = MDP_RGB_565;
+			else
+				mfd->fb_imgType = MDP_RGBA_8888;
+		}
+	}
 	mfd->split_fb_left = mfd->split_fb_right = 0;
 
 	mdss_fb_set_split_mode(mfd, pdata);
@@ -1629,6 +1652,7 @@ static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd,
 		mfd->mdp_sync_pt_data.threshold = 1;
 		mfd->mdp_sync_pt_data.retire_threshold = 0;
 		break;
+	case SPI_PANEL:
 	case MIPI_CMD_PANEL:
 		mfd->mdp_sync_pt_data.threshold = 1;
 		mfd->mdp_sync_pt_data.retire_threshold = 1;
@@ -1651,13 +1675,13 @@ static int mdss_fb_remove(struct platform_device *pdev)
 
 	mdss_fb_remove_sysfs(mfd);
 
-
+    /* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	if (mfd->panel_info && mfd->panel_info->is_prim_panel) {
 		atomic_set(&prim_panel_is_on, false);
 		cancel_delayed_work_sync(&prim_panel_work);
 		wake_lock_destroy(&prim_panel_wakelock);
 	}
-
+    /* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 
 	pm_runtime_disable(mfd->fbi->dev);
 
@@ -1832,7 +1856,7 @@ static int mdss_fb_resume(struct platform_device *pdev)
 #endif
 
 #ifdef CONFIG_PM_SLEEP
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 static int mdss_fb_pm_prepare(struct device *dev)
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(dev);
@@ -1856,7 +1880,7 @@ static void mdss_fb_pm_complete(struct device *dev)
 	}
 	return;
 }
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 static int mdss_fb_pm_suspend(struct device *dev)
 {
@@ -1892,10 +1916,10 @@ static int mdss_fb_pm_resume(struct device *dev)
 #endif
 
 static const struct dev_pm_ops mdss_fb_pm_ops = {
-
+	/* add by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	.prepare = mdss_fb_pm_prepare,
 	.complete = mdss_fb_pm_complete,
-
+	/* add by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 	SET_SYSTEM_SLEEP_PM_OPS(mdss_fb_pm_suspend, mdss_fb_pm_resume)
 };
 
@@ -1956,6 +1980,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 	u32 temp = bkl_lvl;
 	bool ad_bl_notify_needed = false;
 	bool bl_notify_needed = false;
+	bool twm_en = false;
 
 	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
 		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
@@ -1994,9 +2019,16 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			if (mfd->bl_level != bkl_lvl)
 				bl_notify_needed = true;
 			pr_debug("backlight sent to panel :%d\n", temp);
-			pdata->set_backlight(pdata, temp);
-			mfd->bl_level = bkl_lvl;
-			mfd->bl_level_scaled = temp;
+			if (mfd->mdp.is_twm_en)
+				twm_en = mfd->mdp.is_twm_en();
+
+			if (twm_en) {
+				pr_info("TWM Enabled skip backlight update\n");
+			} else {
+				pdata->set_backlight(pdata, temp);
+				mfd->bl_level = bkl_lvl;
+				mfd->bl_level_scaled = temp;
+			}
 		}
 		if (ad_bl_notify_needed)
 			mdss_fb_bl_update_notify(mfd,
@@ -2097,6 +2129,20 @@ static void mdss_panel_validate_debugfs_info(struct msm_fb_data_type *mfd)
 	}
 }
 
+static void mdss_fb_signal_retire_fence(struct msm_fb_data_type *mfd)
+{
+#ifdef TARGET_HW_MDSS_MDP3
+	struct mdp3_session_data *mdp3_session = mfd_to_mdp3_data(mfd);
+	int retire_cnt = mdp3_session->retire_cnt;
+#else
+	struct mdss_overlay_private *mdp5_data = mfd_to_mdp5_data(mfd);
+	int retire_cnt = mdp5_data->retire_cnt;
+#endif
+
+	if (mfd->mdp.signal_retire_fence)
+		mfd->mdp.signal_retire_fence(mfd, retire_cnt);
+}
+
 static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	int req_power_state)
 {
@@ -2144,10 +2190,13 @@ static int mdss_fb_blank_blank(struct msm_fb_data_type *mfd,
 	mfd->panel_power_state = req_power_state;
 
 	ret = mfd->mdp.off_fnc(mfd);
-	if (ret)
+	if (ret) {
 		mfd->panel_power_state = cur_power_state;
-	else if (mdss_panel_is_power_off(req_power_state))
+	} else if (!mdss_panel_is_power_on_interactive(req_power_state)) {
 		mdss_fb_release_fences(mfd);
+		if (mfd->panel.type == MIPI_CMD_PANEL)
+			mdss_fb_signal_retire_fence(mfd);
+	}
 	mfd->op_enable = true;
 	complete(&mfd->power_off_comp);
 
@@ -2270,6 +2319,14 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	 * supported for command mode panels. For all other panel, treat lp
 	 * mode as full unblank and ulp mode as full blank.
 	 */
+	if ((mfd->panel_info->type == SPI_PANEL) &&
+		((BLANK_FLAG_LP == blank_mode) ||
+		(BLANK_FLAG_ULP == blank_mode))) {
+		pr_debug("lp/ulp mode are not supported for SPI panels\n");
+		if (mdss_fb_is_power_on_interactive(mfd))
+			return 0;
+	}
+
 	if (mfd->panel_info->type != MIPI_CMD_PANEL) {
 		if (BLANK_FLAG_LP == blank_mode) {
 			pr_debug("lp mode only valid for cmd mode panels\n");
@@ -2340,14 +2397,18 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	int ret;
 	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
+
+    /* add by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
+	/* printk("SXF Enter %s_ %d blank_mode =%d , prim_panel_is_on =%d \n",__func__,__LINE__,blank_mode,atomic_read(&prim_panel_is_on)); */
 	if ((info == prim_fbi) && (blank_mode == FB_BLANK_UNBLANK) &&
 		atomic_read(&prim_panel_is_on)) {
 		atomic_set(&prim_panel_is_on, false);
 		wake_unlock(&prim_panel_wakelock);
 		cancel_delayed_work_sync(&prim_panel_work);
-
+		/* printk("SXF Exit %s_ %d\n",__func__,__LINE__); */
 		return 0;
 	}
+	/* add by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 	ret = mdss_fb_pan_idle(mfd);
 	if (ret) {
@@ -2977,7 +3038,7 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	atomic_set(&mfd->commits_pending, 0);
 	atomic_set(&mfd->ioctl_ref_cnt, 0);
 	atomic_set(&mfd->kickoff_pending, 0);
-	atomic_set(&mfd->resume_pending, 0);
+	atomic_set(&mfd->resume_pending, 0); /* modified by zhongshengbin for fingerprint D1S-634  2018-03-04 */
 
 	init_timer(&mfd->no_update.timer);
 	mfd->no_update.timer.function = mdss_fb_no_update_notify_timer_cb;
@@ -2993,7 +3054,7 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	init_waitqueue_head(&mfd->idle_wait_q);
 	init_waitqueue_head(&mfd->ioctl_q);
 	init_waitqueue_head(&mfd->kickoff_wait_q);
-	init_waitqueue_head(&mfd->resume_wait_q);
+	init_waitqueue_head(&mfd->resume_wait_q); /* modified by zhongshengbin for fingerprint D1S-634  2018-03-04 */
 
 	ret = fb_alloc_cmap(&fbi->cmap, 256, 0);
 	if (ret)
@@ -3012,14 +3073,14 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	pr_info("FrameBuffer[%d] %dx%d registered successfully!\n", mfd->index,
 					fbi->var.xres, fbi->var.yres);
 
-
+	/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 		if (panel_info->is_prim_panel) {
 		prim_fbi = fbi;
 		atomic_set(&prim_panel_is_on, false);
 		INIT_DELAYED_WORK(&prim_panel_work, prim_panel_off_delayed_work);
 		wake_lock_init(&prim_panel_wakelock, WAKE_LOCK_SUSPEND, "prim_panel_wakelock");
 	}
-
+	/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 	return 0;
 }
@@ -3689,13 +3750,13 @@ int mdss_fb_atomic_commit(struct fb_info *info,
 			__ioctl_transition_dyn_mode_state(mfd,
 				MSMFB_ATOMIC_COMMIT, true, false);
 			if (mfd->panel.type == WRITEBACK_PANEL) {
-				output_layer = commit_v1->output_layer;
-				if (!output_layer) {
+				if (!commit_v1->output_layer) {
 					pr_err("Output layer is null\n");
 					goto end;
 				}
+				output_layer = commit_v1->output_layer;
 				wb_change = !mdss_fb_is_wb_config_same(mfd,
-						commit_v1->output_layer);
+						output_layer);
 				if (wb_change) {
 					old_xres = pinfo->xres;
 					old_yres = pinfo->yres;
@@ -3976,9 +4037,8 @@ skip_commit:
 	if (IS_ERR_VALUE(ret) || !sync_pt_data->flushed) {
 		mdss_fb_release_kickoff(mfd);
 		mdss_fb_signal_timeline(sync_pt_data);
-		if ((mfd->panel.type == MIPI_CMD_PANEL) &&
-			(mfd->mdp.signal_retire_fence))
-			mfd->mdp.signal_retire_fence(mfd, 1);
+		if (mfd->panel.type == MIPI_CMD_PANEL)
+			mdss_fb_signal_retire_fence(mfd);
 	}
 
 	if (dynamic_dsi_switch) {
@@ -5221,7 +5281,6 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	if (!info || !info->par)
 		return -EINVAL;
 
-
 	return mdss_fb_do_ioctl(info, cmd, arg, file);
 }
 
@@ -5415,7 +5474,7 @@ void mdss_fb_report_panel_dead(struct msm_fb_data_type *mfd)
 }
 
 
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
  /*
  * mdss_prim_panel_fb_unblank() - Unblank primary panel FB
  * @timeout : >0 blank primary panel FB after timeout (ms)
@@ -5425,7 +5484,7 @@ int mdss_prim_panel_fb_unblank(int timeout)
 	int ret = 0;
 	struct msm_fb_data_type *mfd = NULL;
 
-		 printk("SXF Enter %s\n",__func__);
+	printk("SXF Enter %s\n", __func__);
 	if (prim_fbi) {
 		mfd = (struct msm_fb_data_type *)prim_fbi->par;
 		ret = wait_event_timeout(mfd->resume_wait_q,
@@ -5442,7 +5501,7 @@ int mdss_prim_panel_fb_unblank(int timeout)
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE
 			console_unlock();
 #endif
-			printk("SXF  !lock_fb_info(prim_fbi) %s_%d\n",__func__,__LINE__);
+			printk("SXF  !lock_fb_info(prim_fbi) %s_%d\n", __func__, __LINE__);
 			return -ENODEV;
 		}
 		if (prim_fbi->blank == FB_BLANK_UNBLANK) {
@@ -5450,34 +5509,35 @@ int mdss_prim_panel_fb_unblank(int timeout)
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE
 			console_unlock();
 #endif
-			printk("SXF  %s_%d\n",__func__,__LINE__);
+			printk("SXF  %s_%d\n", __func__, __LINE__);
 			return 0;
 		}
 		wake_lock(&prim_panel_wakelock);
+		atomic_set(&prim_panel_is_on, true);
 		ret = fb_blank(prim_fbi, FB_BLANK_UNBLANK);
-		printk("SXF fb_blank(prim_fbi, FB_BLANK_UNBLANK) %s ,ret  = %d\n",__func__,ret);
+		printk("SXF fb_blank(prim_fbi, FB_BLANK_UNBLANK) %s ,ret  = %d\n", __func__, ret);
 		if (!ret) {
-			atomic_set(&prim_panel_is_on, true);
 			if (timeout > 0) {
-				printk("SXF %s ,timeout  = %d\n",__func__,timeout);
+				printk("SXF %s ,timeout  = %d\n", __func__, timeout);
 				schedule_delayed_work(&prim_panel_work, msecs_to_jiffies(timeout));
-			}
-			else
+			} else {
 				wake_unlock(&prim_panel_wakelock);
-		} else
+			}
+		} else {
 			wake_unlock(&prim_panel_wakelock);
+		}
 		unlock_fb_info(prim_fbi);
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE
 		console_unlock();
 #endif
-		printk("SXF Exit %s\n",__func__);
+		printk("SXF Exit %s\n", __func__);
 		return ret;
 	}
 
 	pr_err("primary panel is not existed\n");
 	return -EINVAL;
 }
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 /*
  * mdss_fb_calc_fps() - Calculates fps value.

@@ -4,3 +4,4 @@ config INPUT_FINGERPRINT
 				  Say Y here to enable goodix fingerprint driver support!
 source "drivers/input/fingerprint/goodix/Kconfig"
 source "drivers/input/fingerprint/fpc/Kconfig"
+source "drivers/input/fingerprint/goodix_e7/Kconfig"

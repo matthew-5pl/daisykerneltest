@@ -114,7 +114,7 @@ ip6_packet_match(const struct sk_buff *skb,
 	if (FWINV(ret != 0, IP6T_INV_VIA_IN)) {
 		dprintf("VIA in mismatch (%s vs %s).%s\n",
 			indev, ip6info->iniface,
-			ip6info->invflags&IP6T_INV_VIA_IN ?" (INV)":"");
+			ip6info->invflags&IP6T_INV_VIA_IN ? " (INV)":"");
 		return false;
 	}
 
@@ -123,14 +123,14 @@ ip6_packet_match(const struct sk_buff *skb,
 	if (FWINV(ret != 0, IP6T_INV_VIA_OUT)) {
 		dprintf("VIA out mismatch (%s vs %s).%s\n",
 			outdev, ip6info->outiface,
-			ip6info->invflags&IP6T_INV_VIA_OUT ?" (INV)":"");
+			ip6info->invflags&IP6T_INV_VIA_OUT ? " (INV)":"");
 		return false;
 	}
 
 /* ... might want to do something with class and flowlabel here ... */
 
 	/* look for the desired protocol header */
-	if((ip6info->flags & IP6T_F_PROTO)) {
+	if ((ip6info->flags & IP6T_F_PROTO)) {
 		int protohdr;
 		unsigned short _frag_off;
 
@@ -148,7 +148,7 @@ ip6_packet_match(const struct sk_buff *skb,
 				ip6info->proto);
 
 		if (ip6info->proto == protohdr) {
-			if(ip6info->invflags & IP6T_INV_PROTO) {
+			if (ip6info->invflags & IP6T_INV_PROTO) {
 				return false;
 			}
 			return true;
@@ -437,15 +437,16 @@ ip6t_do_table(struct sk_buff *skb,
 
 	*stackptr = origptr;
 
- 	xt_write_recseq_end(addend);
- 	local_bh_enable();
+	xt_write_recseq_end(addend);
+	local_bh_enable();
 
 #ifdef DEBUG_ALLOW_ALL
 	return NF_ACCEPT;
 #else
 	if (acpar.hotdrop)
 		return NF_DROP;
-	else return verdict;
+	else
+		return verdict;
 #endif
 }
 
@@ -583,10 +584,15 @@ static void cleanup_match(struct xt_entry_match *m, struct net *net)
 	module_put(par.match->me);
 }
 
-static int
+/*static int
 check_entry(const struct ip6t_entry *e)
 {
+	long size_of_base_struct = e->elems - (const unsigned char *)e;
 	const struct xt_entry_target *t;
+
+	// target start is within the ip/ip6/arpt_entry struct
+	if (e->target_offset < size_of_base_struct)
+		return -EINVAL;
 
 	if (!ip6_checkentry(&e->ipv6))
 		return -EINVAL;
@@ -600,7 +606,7 @@ check_entry(const struct ip6t_entry *e)
 		return -EINVAL;
 
 	return 0;
-}
+}*/
 
 static int check_match(struct xt_entry_match *m, struct xt_mtchk_param *par)
 {
@@ -681,6 +687,7 @@ find_check_entry(struct ip6t_entry *e, struct net *net, const char *name,
 	struct xt_entry_match *ematch;
 
 	j = 0;
+	memset(&mtpar, 0, sizeof(mtpar));
 	mtpar.net	= net;
 	mtpar.table     = name;
 	mtpar.entryinfo = &e->ipv6;
@@ -759,7 +766,11 @@ check_entry_size_and_hooks(struct ip6t_entry *e,
 		return -EINVAL;
 	}
 
-	err = check_entry(e);
+	if (!ip6_checkentry(&e->ipv6))
+		return -EINVAL;
+
+	err = xt_check_entry_offsets(e, e->elems, e->target_offset,
+				     e->next_offset);
 	if (err)
 		return err;
 
@@ -810,7 +821,7 @@ static void cleanup_entry(struct ip6t_entry *e, struct net *net)
    newinfo) */
 static int
 translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
-                const struct ip6t_replace *repl)
+				const struct ip6t_replace *repl)
 {
 	struct ip6t_entry *iter;
 	unsigned int *offsets;
@@ -984,7 +995,7 @@ copy_entries_to_user(unsigned int total_size,
 
 	/* FIXME: use iterator macros --RR */
 	/* ... then go back and fix counters and names */
-	for (off = 0, num = 0; off < total_size; off += e->next_offset, num++){
+	for (off = 0, num = 0; off < total_size; off += e->next_offset, num++) {
 		unsigned int i;
 		const struct xt_entry_match *m;
 		const struct xt_entry_target *t;
@@ -1105,7 +1116,7 @@ static int compat_table_info(const struct xt_table_info *info,
 #endif
 
 static int get_info(struct net *net, void __user *user,
-                    const int *len, int compat)
+					const int *len, int compat)
 {
 	char name[XT_TABLE_MAXNAMELEN];
 	struct xt_table *t;
@@ -1147,7 +1158,7 @@ static int get_info(struct net *net, void __user *user,
 		       sizeof(info.underflow));
 		info.num_entries = private->number;
 		info.size = private->size;
-		strcpy(info.name, name);
+		strlcpy(info.name, name, sizeof(info.name));
 
 		if (copy_to_user(user, &info, *len) != 0)
 			ret = -EFAULT;
@@ -1167,7 +1178,7 @@ static int get_info(struct net *net, void __user *user,
 
 static int
 get_entries(struct net *net, struct ip6t_get_entries __user *uptr,
-            const int *len)
+			const int *len)
 {
 	int ret;
 	struct ip6t_get_entries get;
@@ -1494,8 +1505,11 @@ check_compat_entry_size_and_hooks(struct compat_ip6t_entry *e,
 		return -EINVAL;
 	}
 
-	/* For purposes of check_entry casting the compat entry is fine */
-	ret = check_entry((struct ip6t_entry *)e);
+	if (!ip6_checkentry(&e->ipv6))
+		return -EINVAL;
+
+	ret = xt_compat_check_entry_offsets(e, e->elems,
+					    e->target_offset, e->next_offset);
 	if (ret)
 		return ret;
 
@@ -2082,6 +2096,7 @@ static struct xt_match ip6t_builtin_mt[] __read_mostly = {
 		.checkentry = icmp6_checkentry,
 		.proto      = IPPROTO_ICMPV6,
 		.family     = NFPROTO_IPV6,
+		.me	    = THIS_MODULE,
 	},
 };
 

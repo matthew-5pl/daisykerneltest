@@ -1024,11 +1024,11 @@ CSID_TG:
 
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
 
-	if (0 == s_ctrl->id) {
+	if(0 == s_ctrl->id){
 		hq_regiser_hw_info(HWID_MAIN_CAM, (char *)(s_ctrl->sensordata->eeprom_name));
-	} else if (1 == s_ctrl->id) {
+	}else if(1 == s_ctrl->id){
 		hq_regiser_hw_info(HWID_MAIN_CAM_2, (char *)(s_ctrl->sensordata->eeprom_name));
-	} else if (2 == s_ctrl->id) {
+	}else if(2 == s_ctrl->id){
 		hq_regiser_hw_info(HWID_SUB_CAM, (char *)(s_ctrl->sensordata->eeprom_name));
 	}
 

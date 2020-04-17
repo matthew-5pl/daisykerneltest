@@ -819,6 +819,8 @@ static int do_sched_rt_period_timer(struct rt_bandwidth *rt_b, int overrun)
 		struct rq *rq = rq_of_rt_rq(rt_rq);
 
 		raw_spin_lock(&rq->lock);
+		update_rq_clock(rq);
+
 		if (rt_rq->rt_time) {
 			u64 runtime;
 
@@ -1717,9 +1719,6 @@ static int find_lowest_rq_hmp(struct task_struct *task)
 			continue;
 
 		for_each_cpu(i, &candidate_mask) {
-			if (sched_boost() && cpu_capacity(i) != max_capacity)
-				continue;
-
 			if (sched_cpu_high_irqload(i))
 				continue;
 

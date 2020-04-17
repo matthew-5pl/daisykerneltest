@@ -18,7 +18,6 @@
  *
  *
  * Copyright (c) 2015 Fingerprint Cards AB <tech@fingerprints.com>
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License Version 2
@@ -42,11 +41,11 @@
 #include <linux/fb.h>
 #include <linux/mdss_io_util.h>
 
-
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
+/* #define FPC_TTW_HOLD_TIME 1000 */
 #define FPC_TTW_HOLD_TIME 2000
 #define FP_UNLOCK_REJECTION_TIMEOUT  (FPC_TTW_HOLD_TIME - 500)
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 #define RESET_LOW_SLEEP_MIN_US 5000
 #define RESET_LOW_SLEEP_MAX_US (RESET_LOW_SLEEP_MIN_US + 100)
@@ -92,12 +91,12 @@ struct fpc1020_data {
 	bool prepared;
 	bool compatible_enabled;
 	atomic_t wakeup_enabled; /* Used both in ISR and non-ISR */
-
+	/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	struct notifier_block fb_notifier;
 	bool fb_black;
 	bool wait_finger_down;
 	struct work_struct work;
-
+	/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 };
 
 static irqreturn_t fpc1020_irq_handler(int irq, void *handle);
@@ -171,6 +170,13 @@ found:
 	return rc;
 }
 
+/**
+ * sysfs node for controlling clocks.
+ *
+ * This is disabled in platform variant of this driver but kept for
+ * backwards compatibility. Only prints a debug print that it is
+ * disabled.
+ */
 static ssize_t clk_enable_set(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -182,6 +188,18 @@ static ssize_t clk_enable_set(struct device *dev,
 }
 static DEVICE_ATTR(clk_enable, S_IWUSR, NULL, clk_enable_set);
 
+/**
+ * Will try to select the set of pins (GPIOS) defined in a pin control node of
+ * the device tree named @p name.
+ *
+ * The node can contain several eg. GPIOs that is controlled when selecting it.
+ * The node may activate or deactivate the pins it contains, the action is
+ * defined in the device tree node itself and not here. The states used
+ * internally is fetched at probe time.
+ *
+ * @see pctl_names
+ * @see fpc1020_probe
+ */
 static int select_pin_ctl(struct fpc1020_data *fpc1020, const char *name)
 {
 	size_t i;
@@ -431,7 +449,7 @@ static ssize_t irq_ack(struct device *dev,
 }
 static DEVICE_ATTR(irq, S_IRUSR | S_IWUSR, irq_get, irq_ack);
 
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 static ssize_t fingerdown_wait_set(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
@@ -449,7 +467,7 @@ static ssize_t fingerdown_wait_set(struct device *dev,
 	return count;
 }
 static DEVICE_ATTR(fingerdown_wait, S_IWUSR, NULL, fingerdown_wait_set);
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 static ssize_t compatible_all_set(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
@@ -467,7 +485,7 @@ static ssize_t compatible_all_set(struct device *dev,
 
 		rc = fpc1020_request_named_gpio(fpc1020, "fpc,gpio_rst",
 			&fpc1020->rst_gpio);
-		dev_err(dev, "fpc request reset result = %d\n",rc);
+		dev_err(dev, "fpc request reset result = %d\n", rc);
 		if (rc)
 			goto exit;
 		fpc1020->fingerprint_pinctrl = devm_pinctrl_get(dev);
@@ -507,8 +525,6 @@ static ssize_t compatible_all_set(struct device *dev,
 			device_init_wakeup(dev, 1);
 		}
 
-
-
 		rc = devm_request_threaded_irq(dev, gpio_to_irq(fpc1020->irq_gpio),
 			NULL, fpc1020_irq_handler, irqf,
 			dev_name(dev), fpc1020);
@@ -534,8 +550,7 @@ static ssize_t compatible_all_set(struct device *dev,
 			devm_gpio_free(dev, fpc1020->irq_gpio);
 			pr_info("remove irq_gpio success\n");
 		}
-		if (gpio_is_valid(fpc1020->rst_gpio))
-		{
+		if (gpio_is_valid(fpc1020->rst_gpio)) {
 			devm_gpio_free(dev, fpc1020->rst_gpio);
 			pr_info("remove rst_gpio success\n");
 		}
@@ -557,9 +572,9 @@ static struct attribute *attributes[] = {
 	&dev_attr_wakeup_enable.attr,
 	&dev_attr_clk_enable.attr,
 	&dev_attr_irq.attr,
-
+	/* added by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	&dev_attr_fingerdown_wait.attr,
-
+	/* added by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 	&dev_attr_compatible_all.attr,
 	NULL
 };
@@ -568,35 +583,34 @@ static const struct attribute_group attribute_group = {
 	.attrs = attributes,
 };
 
-
+/* added by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 static void notification_work(struct work_struct *work)
 {
 	mdss_prim_panel_fb_unblank(FP_UNLOCK_REJECTION_TIMEOUT);
 	printk("unblank\n");
 }
-
+/* added by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 
 static irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 {
 	struct fpc1020_data *fpc1020 = handle;
 
-	dev_err(fpc1020->dev, "%s\n", __func__);
-
+	dev_err(fpc1020->dev, "%s\n", __func__);  /* modified by zhongshengbin for fingerprint D1S-634  2018-03-04 */
 
 	if (atomic_read(&fpc1020->wakeup_enabled)) {
 		wake_lock_timeout(&fpc1020->ttw_wl,
 					msecs_to_jiffies(FPC_TTW_HOLD_TIME));
 	}
 
-
+    /* added by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
 		if (fpc1020->wait_finger_down && fpc1020->fb_black) {
 		printk("%s enter\n", __func__);
 		fpc1020->wait_finger_down = false;
 		schedule_work(&fpc1020->work);
 	}
-
+    /* added by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 	return IRQ_HANDLED;
 }
@@ -624,7 +638,7 @@ static int fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	return 0;
 }
 
-
+/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 static int fpc_fb_notif_callback(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
@@ -661,14 +675,14 @@ static int fpc_fb_notif_callback(struct notifier_block *nb,
 static struct notifier_block fpc_notif_block = {
 	.notifier_call = fpc_fb_notif_callback,
 };
-
+/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 
 static int fpc1020_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	int rc = 0;
-
+	/* size_t i; */
 	struct device_node *np = dev->of_node;
 	struct fpc1020_data *fpc1020 = devm_kzalloc(dev, sizeof(*fpc1020),
 			GFP_KERNEL);
@@ -688,7 +702,7 @@ static int fpc1020_probe(struct platform_device *pdev)
 		rc = -EINVAL;
 		goto exit;
 	}
-
+	/* atomic_set(&fpc1020->wakeup_enabled, 0); */
 
     mutex_init(&fpc1020->lock);
     wake_lock_init(&fpc1020->ttw_wl, WAKE_LOCK_SUSPEND, "fpc_ttw_wl");
@@ -701,17 +715,17 @@ static int fpc1020_probe(struct platform_device *pdev)
 
 
 
+	/* rc = hw_reset(fpc1020); */
 
-
-
-
+	/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
+	/* dev_info(dev, "%s: ok\n", __func__); */
 	dev_err(dev, "%s: ok\n", __func__);
 	fpc1020->fb_black = false;
 	fpc1020->wait_finger_down = false;
 	INIT_WORK(&fpc1020->work, notification_work);
 	fpc1020->fb_notifier = fpc_notif_block;
 	fb_register_client(&fpc1020->fb_notifier);
-
+	/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 
 exit:
 	return rc;
@@ -721,9 +735,9 @@ static int fpc1020_remove(struct platform_device *pdev)
 {
 	struct fpc1020_data *fpc1020 = platform_get_drvdata(pdev);
 
-
+    /* add by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	fb_unregister_client(&fpc1020->fb_notifier);
-
+    /* add by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 
 	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
 	mutex_destroy(&fpc1020->lock);

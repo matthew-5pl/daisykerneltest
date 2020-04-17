@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -235,6 +235,7 @@ struct msm_mdp_interface {
 	int (*pp_release_fnc)(struct msm_fb_data_type *mfd);
 	void (*signal_retire_fence)(struct msm_fb_data_type *mfd,
 					int retire_cnt);
+	bool (*is_twm_en)(void);
 	void *private1;
 };
 
@@ -332,10 +333,10 @@ struct msm_fb_data_type {
 	struct task_struct *disp_thread;
 	atomic_t commits_pending;
 	atomic_t kickoff_pending;
-
+	/* modified by zhongshengbin for fingerprint D1S-634 begin 2018-03-04 */
 	atomic_t resume_pending;
 	wait_queue_head_t resume_wait_q;
-
+	/* modified by zhongshengbin for fingerprint D1S-634 end 2018-03-04 */
 	wait_queue_head_t commit_wait_q;
 	wait_queue_head_t idle_wait_q;
 	wait_queue_head_t kickoff_wait_q;

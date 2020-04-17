@@ -1,5 +1,4 @@
 /* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -46,15 +45,15 @@
 			39 01 00 00 00 00 02 00 80
 			39 01 00 00 00 00 0D CA F0 D9 C8 BA AF A6 9E 98 92 8D 88 84
 			39 01 00 00 00 00 02 00 90
-			39 01 00 00 00 00 0A CA FE FF 66 FB FF 33 F6 FF 66
+			39 01 00 00 00 00 0A CA FD FF 98 FB FF 33 F6 FF 66
 			39 01 00 00 00 00 02 00 A0
-			39 01 00 00 00 00 0D D6 0f 10 0f 11 1b 15 10 0c 0d 0f 10 10
+			39 01 00 00 00 00 0D D6 0a 0b 0b 0b 0b 0c 0f 13 0f 13 11 0e
 			39 01 00 00 00 00 02 00 B0
-			39 01 00 00 00 00 0D D6 99 c8 c7 8f dc ed bf 9a 8f 89 93 9c
+			39 01 00 00 00 00 0D D6 9a 8d 82 83 83 83 80 6b 80 85 88 8a
 			39 01 00 00 00 00 02 00 C0
-			39 01 00 00 00 00 0D D6 91 b0 af 8a bd c9 aa 91 8a 86 8d 93
+			39 01 00 00 00 00 0D D6 8d 86 91 90 89 81 80 83 80 8a 86 84
 			39 01 00 00 00 00 02 00 D0
-			39 01 00 00 00 00 0D D6 88 98 98 85 9f a4 95 89 85 83 86 89
+			39 01 00 00 00 00 0D D6 88 84 80 80 80 80 80 80 80 80 80 80
 			39 01 00 00 00 00 02 00 B0
 			39 01 00 00 00 00 02 CA 00
 			39 01 00 00 00 00 02 00 B2
@@ -117,13 +116,13 @@
 		qcom,mdss-dsi-t-clk-pre = <0x34>;
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <4095>;
-		qcom,mdss-brightness-max-level = <4095>;
 		qcom,mdss-brightness-max-level-global = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_wled";
 		qcom,mdss-dsi-reset-sequence = <1 10>, <0 2>, <1 15>;
 		qcom,mdss-dsi-lp11-init;
+		//qcom,mdss-dsi-tx-eot-append;
 		qcom,esd-check-enabled;
 		qcom,mdss-dsi-panel-status-command = [06 01 00 01 05 00 01 0A];
 		qcom,mdss-dsi-panel-status-command-mode = "dsi_lp_mode";

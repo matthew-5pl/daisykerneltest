@@ -1,5 +1,4 @@
-/* Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+/* Copyright (c) 2012-2017,2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1161,6 +1160,7 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
 	int ret = 0;
 	struct mdss_dsi_ctrl_pdata *sctrl_pdata = NULL;
+	/*Add by HQ-zmc [Date: 2017-12-18 11:16:00]*/
 	struct NVT_CSOT_ESD *nvt_csot_esd_status = get_nvt_csot_esd_status();
 
 	if (nvt_csot_esd_status == NULL) {
@@ -1182,6 +1182,14 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	if (!mdss_dsi_sync_wait_enable(ctrl_pdata)) {
 		ret = mdss_dsi_read_status(ctrl_pdata);
 	} else {
+		/*
+		 * Read commands to check ESD status are usually sent at
+		 * the same time to both the controllers. However, if
+		 * sync_wait is enabled, we need to ensure that the
+		 * dcs commands are first sent to the non-trigger
+		 * controller so that when the commands are triggered,
+		 * both controllers receive it at the same time.
+		 */
 		if (mdss_dsi_sync_wait_trigger(ctrl_pdata)) {
 			if (sctrl_pdata)
 				ret = mdss_dsi_read_status(sctrl_pdata);
@@ -1192,6 +1200,12 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 				ret = mdss_dsi_read_status(sctrl_pdata);
 		}
 	}
+
+	/*
+	 * mdss_dsi_read_status returns the number of bytes returned
+	 * by the panel. Success value is greater than zero and failure
+	 * case returns zero.
+	 */
 	if (ret > 0) {
 		if (!mdss_dsi_sync_wait_enable(ctrl_pdata) ||
 			mdss_dsi_sync_wait_trigger(ctrl_pdata))
@@ -1206,7 +1220,8 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 			  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
 	pr_debug("%s: Read register done with ret: %d\n", __func__, ret);
 
-	if ((ret <= 0)&&(!nvt_csot_esd_status->ESD_TE_status))
+	/*Add by HQ-zmc [Date: 2017-12-19 18:39:41]*/
+	if ((ret <= 0) && (!nvt_csot_esd_status->ESD_TE_status))
 		nvt_csot_esd_status->ESD_TE_status = true;
 
 	return ret;
@@ -1276,9 +1291,13 @@ int mdss_dsi_reg_status_check(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 extern u32 te_count;
 
 #ifdef CONFIG_PROJECT_VINCE
+/*Add by HQ-zmc [Date: 2018-03-05 17:58:53]
+  TE_check per 1000ms, te_count < 48
+*/
 int mdss_dsi_TE_NT35596_check (struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 {
     int ret = 1;
+    /*Add by HQ-zmc [Date: 2017-12-18 11:16:00]*/
 	struct NVT_CSOT_ESD *nvt_csot_esd_status = get_nvt_csot_esd_status();
 
     if (te_count < 48) {
@@ -1299,14 +1318,15 @@ int mdss_dsi_TE_NT35596_check (struct mdss_dsi_ctrl_pdata *ctrl_pdata)
        int ret = 1;
 
 	if (te_count_old != te_count) {
-
+		/* pr_err("%s:--------------liujia-------------te_count_old:te_count=%d:%d\n",__func__, te_count_old, te_count); */
 		te_count_old = te_count;
-	} else{
+	} else {
 		ret = 0;
 		pr_err("liujia te_count doesnt add as time");
 	}
-      if (te_count>=10000)
-	  	{te_count = 0;}
+	if (te_count >= 10000) {
+		te_count = 0;
+	}
 
 	return ret;
 
@@ -1631,6 +1651,7 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int len, i, ret = 0, data = 0;
 	u32 *bp;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
+	int ignored = 0;        /* overflow ignored */
 
 	if (tp->len > DMA_TPG_FIFO_LEN) {
 		pr_debug("command length more than FIFO length\n");
@@ -1646,9 +1667,22 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	len = ALIGN(tp->len, 4);
 
 	reinit_completion(&ctrl->dma_comp);
+	if (ctrl->panel_mode == DSI_VIDEO_MODE)
+		ignored = 1;
 
-	if (mdss_dsi_sync_wait_trigger(ctrl))
+	if (mdss_dsi_sync_wait_trigger(ctrl)) {
 		mctrl = mdss_dsi_get_other_ctrl(ctrl);
+			if ((mctrl) && (ignored == 1)) {
+				/* mask out overflow isr */
+				mdss_dsi_set_reg(mctrl, 0x10c,
+					 0x0f0000, 0x0f0000);
+			}
+	}
+
+	if (ignored) {
+		/* mask out overflow isr */
+		mdss_dsi_set_reg(ctrl, 0x10c, 0x0f0000, 0x0f0000);
+	}
 
 	data = BIT(16) | BIT(17);	/* select CMD_DMA_PATTERN_SEL to 3 */
 	data |= BIT(2);			/* select CMD_DMA_FIFO_MODE to 1 */
@@ -1709,6 +1743,13 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	/* Disable CMD_DMA_TPG */
 	MIPI_OUTP(ctrl->ctrl_base + 0x15c, 0x0);
 
+	if (ignored) {
+		/* clear pending overflow status */
+		mdss_dsi_set_reg(ctrl, 0xc, 0xffffffff, 0x44440000);
+		/* restore overflow isr */
+		mdss_dsi_set_reg(ctrl, 0x10c, 0x0f0000, 0);
+	}
+
 	if (mctrl) {
 		/* Reset the DMA TPG FIFO */
 		MIPI_OUTP(mctrl->ctrl_base + 0x1ec, 0x1);
@@ -1717,8 +1758,13 @@ static int mdss_dsi_cmd_dma_tpg_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 		wmb(); /* make sure FIFO reset happens */
 		/* Disable CMD_DMA_TPG */
 		MIPI_OUTP(mctrl->ctrl_base + 0x15c, 0x0);
+		if (ignored) {
+			/* clear pending overflow status */
+			mdss_dsi_set_reg(mctrl, 0xc, 0xffffffff, 0x44440000);
+			/* restore overflow isr */
+			mdss_dsi_set_reg(mctrl, 0x10c, 0x0f0000, 0);
+		}
 	}
-
 	return ret;
 }
 

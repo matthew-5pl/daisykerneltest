@@ -1,5 +1,4 @@
 /* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4654,7 +4653,7 @@ static int fg_power_get_property(struct power_supply *psy,
 		val->intval = 4000000;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		val->intval = 4000000;
+		val->intval = chip->learning_data.learned_cc_uah;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_NOW:
 		val->intval = chip->learning_data.cc_uah;
@@ -6324,25 +6323,25 @@ static void fg_hw_restart(struct fg_chip *chip)
 
 	reg = 0x80;
 	batt_id = get_sram_prop_now(chip, FG_DATA_BATT_ID);
-	printk("fg_hw_restart old battery id = %d\n",batt_id);
+	printk("fg_hw_restart old battery id = %d\n", batt_id);
 
-	fg_masked_write(chip, 0x4150,reg, reg, 1);
+	fg_masked_write(chip, 0x4150, reg, reg, 1); /* set 0x80 to 0x4150 */
 
-	fg_masked_write(chip, chip->soc_base + SOC_RESTART,0xFF, 0, 1);
+	fg_masked_write(chip, chip->soc_base + SOC_RESTART, 0xFF, 0, 1); /*clear 0x4051 */
 	mdelay(5);
 
 	reg = REDO_BATID_DURING_FIRST_EST|REDO_FIRST_ESTIMATE;
 
-	fg_masked_write(chip, chip->soc_base + SOC_RESTART,reg, reg, 1);
+	fg_masked_write(chip, chip->soc_base + SOC_RESTART, reg, reg, 1); /*set 0x18 to 0x4051*/
 	mdelay(5);
 
-	reg = REDO_BATID_DURING_FIRST_EST |REDO_FIRST_ESTIMATE| RESTART_GO;
+	reg = REDO_BATID_DURING_FIRST_EST | REDO_FIRST_ESTIMATE | RESTART_GO;
 
-	fg_masked_write(chip, chip->soc_base + SOC_RESTART,reg, reg, 1);
+	fg_masked_write(chip, chip->soc_base + SOC_RESTART, reg, reg, 1); /*set 0x19 to 0x4051*/
 	mdelay(1000);
 
-	fg_masked_write(chip, chip->soc_base + SOC_RESTART,0xFF, 0, 1);
-	fg_masked_write(chip, 0x4150,0x80, 0, 1);
+	fg_masked_write(chip, chip->soc_base + SOC_RESTART, 0xFF, 0, 1); /*clear 0x4051*/
+	fg_masked_write(chip, 0x4150, 0x80, 0, 1); /* clear 0x4150 */
 
 	mdelay(2000);
 
@@ -6355,7 +6354,7 @@ static void fg_hw_restart(struct fg_chip *chip)
 	}
 
 	batt_id = get_sram_prop_now(chip, FG_DATA_BATT_ID);
-	printk("fg_hw_restart new batt_id=%d\n",batt_id);
+	printk("fg_hw_restart new batt_id=%d\n", batt_id);
 }
 #endif
 
@@ -6390,8 +6389,11 @@ static int fg_batt_profile_init(struct fg_chip *chip)
 
 	#ifdef FACTORY_VERSION_ENABLE
 	batt_id = get_sram_prop_now(chip, FG_DATA_BATT_ID);
-	printk("batt_id_ohm=%d\n",batt_id);
+	printk("batt_id_ohm=%d\n", batt_id);
 
+	/*飞毛腿batt id范围：39000-43600*/
+	/*光宇batt id范围：48000-53600*/
+	/*欣旺达batt id范围：73000-82000*/
 	if (batt_id >= SCUD_ID_MIN && batt_id <= SCUD_ID_MAX) {
 		match = 1;
 		printk("SCUD match succ.\n");
@@ -6406,7 +6408,7 @@ static int fg_batt_profile_init(struct fg_chip *chip)
 		fg_hw_restart(chip);
 		printk("re-read bat id\n");
 	}
-	printk("batt_id=%d\n",get_sram_prop_now(chip, FG_DATA_BATT_ID));
+	printk("batt_id=%d\n", get_sram_prop_now(chip, FG_DATA_BATT_ID));
 	#endif
 
 wait:
@@ -6834,8 +6836,8 @@ static void charge_full_work(struct work_struct *work)
 	}
 	fg_mem_release(chip);
 
-
-	while(msoc != 0xFF && retry != 8) {
+	/*max 1.47sec*/
+	while (msoc != 0xFF && retry != 8) {
 		msleep(200);
 		msoc = get_monotonic_soc_raw(chip);
 		retry++;
@@ -8791,35 +8793,35 @@ static void fg_adc_clk_change(struct fg_chip *chip, int val)
 	int rc = 0;
 
 	if (val > 1 || val < 0) {
-		pr_err(":%s Invalid Value %d, Return!\n",__func__,val);
+		pr_err(":%s Invalid Value %d, Return!\n", __func__, val);
 		return;
 	}
 	chip->fg_restarting = true;
 
 	rc = fg_read(chip, &reg, chip->soc_base + SOC_LOW_PWR_CFG, 1);
 	if (rc) {
-		pr_err(":%s failed to read SOC_LOW_PWR_CFG\n",__func__);
-
+		pr_err(":%s failed to read SOC_LOW_PWR_CFG\n", __func__);
+		/*goto adc_clk_change_fail;*/
 	}
-	pr_err(":%s SOC_LOW_PWR_CFG = 0x%02x\n",__func__,reg);
-	usleep_range(5000,6000);
+	pr_err(":%s SOC_LOW_PWR_CFG = 0x%02x\n", __func__, reg);
+	usleep_range(5000, 6000);
 
-	rc = fg_sec_masked_write(chip, chip->soc_base + SOC_LOW_PWR_CFG, LO_FRQ_CLKSWITCH_EN, val, 1);
+	rc = fg_sec_masked_write(chip, chip->soc_base + SOC_LOW_PWR_CFG, LO_FRQ_CLKSWITCH_EN, val, 1); /* set 0x240f5[0]; */
 	if (rc) {
-		pr_err(":%s failed to change FG ADC Clk\n",__func__);
+		pr_err(":%s failed to change FG ADC Clk\n", __func__);
 		goto adc_clk_change_fail;
 	}
-	usleep_range(5000,6000);
+	usleep_range(5000, 6000);
 
 	rc = fg_read(chip, &reg, chip->soc_base + SOC_LOW_PWR_CFG, 1);
 	if (rc) {
-		pr_err(":%s failed to read SOC_LOW_PWR_CFG\n",__func__);
+		pr_err(":%s failed to read SOC_LOW_PWR_CFG\n", __func__);
 		goto adc_clk_change_fail;
 	}
-	pr_err(":%s SOC_LOW_PWR_CFG = 0x%02x\n",__func__,reg);
+	pr_err(":%s SOC_LOW_PWR_CFG = 0x%02x\n", __func__, reg);
 
 	chip->fg_restarting = false;
-	pr_err(":%s Success change FG ADC Clk\n",__func__);
+	pr_err(":%s Success change FG ADC Clk\n", __func__);
 	return;
 
 adc_clk_change_fail:
@@ -9015,7 +9017,7 @@ static int fg_probe(struct spmi_device *spmi)
 		pr_err("failed to clear interrupts %d\n", rc);
 		goto of_init_fail;
 	}
-	fg_adc_clk_change(chip,1);
+	fg_adc_clk_change(chip, 1);
 	rc = fg_init_irqs(chip);
 	if (rc) {
 		pr_err("failed to request interrupts %d\n", rc);

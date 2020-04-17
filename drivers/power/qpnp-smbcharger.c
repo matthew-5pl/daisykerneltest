@@ -1,5 +1,4 @@
-/* Copyright (c) 2014-2018 The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+/* Copyright (c) 2014-2019 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -40,6 +39,7 @@
 #include <linux/msm_bcl.h>
 #include <linux/ktime.h>
 #include <linux/pmic-voter.h>
+#include <soc/qcom/smem.h>
 
 /* Mask/Bit helpers */
 #define _SMB_MASK(BITS, POS) \
@@ -3057,7 +3057,7 @@ static int set_usb_current_limit_vote_cb(struct votable *votable,
 		return 0;
 
 	aicl_ma = smbchg_get_aicl_level_ma(chip);
-	pr_err("[SMBCHG]aicl_ma=%d\n",aicl_ma);
+	pr_err("[SMBCHG]aicl_ma=%d\n", aicl_ma);
 	if (icl_ma > aicl_ma)
 		smbchg_rerun_aicl(chip);
 
@@ -3066,12 +3066,21 @@ static int set_usb_current_limit_vote_cb(struct votable *votable,
 	return 0;
 }
 
+#define		PCBA_V1_IN		35
+#define		PCBA_V2_IN		38
+#define		PCBA_V2_CN		36
 static int smbchg_system_temp_level_set(struct smbchg_chip *chip,
 								int lvl_sel)
 {
 	int rc = 0;
 	int prev_therm_lvl;
 	int thermal_icl_ma;
+
+	unsigned int	India_thermal_mitigation[7] = {2500, 2500, 1900, 1900, 1000, 1000, 0};
+
+	int *pcba_config = NULL;
+	pcba_config = (int *)smem_find(SMEM_ID_VENDOR1, sizeof(int), 0, SMEM_ANY_HOST_FLAG);
+	pr_err("pcba config check=%d.\n", *(pcba_config));
 
 	if (!chip->thermal_mitigation) {
 		dev_err(chip->dev, "Thermal mitigation not supported\n");
@@ -3126,8 +3135,16 @@ static int smbchg_system_temp_level_set(struct smbchg_chip *chip,
 			pr_err("Couldn't disable DC thermal ICL vote rc=%d\n",
 				rc);
 	} else {
-		thermal_icl_ma =
-			(int)chip->thermal_mitigation[chip->therm_lvl_sel];
+		if (*(pcba_config) == PCBA_V1_IN
+				|| *(pcba_config) == PCBA_V2_IN) {
+			thermal_icl_ma =
+				(int)India_thermal_mitigation[chip->therm_lvl_sel];
+			pr_err("Thermal_India.\n");
+		} else {
+			thermal_icl_ma =
+				(int)chip->thermal_mitigation[chip->therm_lvl_sel];
+			pr_err("Thermal_CN&Global.\n");
+		}
 		rc = vote(chip->usb_icl_votable, THERMAL_ICL_VOTER, true,
 					thermal_icl_ma);
 		if (rc < 0)
@@ -4546,12 +4563,12 @@ static void smbchg_cool_limit_work(struct work_struct *work)
 
 	if (temp > 0 && temp <= 50) {
 		mutex_lock(&chip->cool_current);
-		rc = smbchg_fastchg_current_comp_set(chip,250);
+		rc = smbchg_fastchg_current_comp_set(chip, 250);
 		mutex_unlock(&chip->cool_current);
 	}
 	if (temp > 50 && temp < 150) {
 		mutex_lock(&chip->cool_current);
-		rc = smbchg_fastchg_current_comp_set(chip,1200);
+		rc = smbchg_fastchg_current_comp_set(chip, 1200);
 		mutex_unlock(&chip->cool_current);
 	}
 
@@ -4954,16 +4971,23 @@ static int smbchg_restricted_charging(struct smbchg_chip *chip, bool enable)
 }
 
 /*Modifiy by HQ-zmc [Date: 2018-04-04 15:23:36]*/
-static bool tp_usb_plugin = 0;
+static bool tp_usb_plugin;
 
-bool *check_charge_mode(void){
+bool *check_charge_mode(void)
+{
 	return &tp_usb_plugin;
 }
 
+extern ssize_t  fts_touch_set_charger_mode(int mode);
+extern int fts_5446_enable_charger_mode;
 static void handle_usb_removal(struct smbchg_chip *chip)
 {
 	struct power_supply *parallel_psy = get_parallel_psy(chip);
 	int rc;
+	if (fts_5446_enable_charger_mode == 1) {
+		/*switch tp to nomal*/
+		fts_touch_set_charger_mode(0);
+	}
 
 	tp_usb_plugin = 0;
 
@@ -5042,6 +5066,10 @@ static void handle_usb_insertion(struct smbchg_chip *chip)
 	enum power_supply_type usb_supply_type;
 	int rc;
 	char *usb_type_name = "null";
+	if (fts_5446_enable_charger_mode == 1) {
+		/* set tp switch charge mode */
+		fts_touch_set_charger_mode(1);
+	}
 
 	tp_usb_plugin = 1;
 
@@ -6136,7 +6164,6 @@ static void smbchg_external_power_changed(struct power_supply *psy)
 				POWER_SUPPLY_PROP_CURRENT_MAX, &prop);
 	if (rc == 0)
 		current_limit = prop.intval / 1000;
-
 	read_usb_type(chip, &usb_type_name, &usb_supply_type);
 
 	pr_smb(PR_MISC, "usb type = %s current_limit = %d\n",
@@ -6163,6 +6190,7 @@ static enum power_supply_property smbchg_battery_properties[] = {
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
 	POWER_SUPPLY_PROP_FLASH_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -6214,6 +6242,9 @@ static int smbchg_battery_set_property(struct power_supply *psy,
 		power_supply_changed(&chip->batt_psy);
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
+		smbchg_system_temp_level_set(chip, val->intval);
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
 		smbchg_system_temp_level_set(chip, val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX:
@@ -6350,6 +6381,12 @@ static int smbchg_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_SYSTEM_TEMP_LEVEL:
 		val->intval = chip->therm_lvl_sel;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = chip->therm_lvl_sel;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = chip->thermal_levels;
 		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_MAX:
 		val->intval = smbchg_get_aicl_level_ma(chip) * 1000;
@@ -6559,10 +6596,10 @@ static irqreturn_t batt_warm_handler(int irq, void *_chip)
 	int rc;
 	/* set the warm float voltage compensation,set the warm float voltage to 4.1V */
 	if (chip->float_voltage_comp != -EINVAL) {
-		rc = smbchg_float_voltage_comp_set(chip,chip->float_voltage_comp);
+		rc = smbchg_float_voltage_comp_set(chip, chip->float_voltage_comp);
 		if (rc < 0)
-			dev_err(chip->dev, "Couldn't set float voltage comp rc = %d\n",rc);
-		pr_smb(PR_STATUS, "set float voltage comp to %d\n",chip->float_voltage_comp);
+			dev_err(chip->dev, "Couldn't set float voltage comp rc = %d\n", rc);
+		pr_smb(PR_STATUS, "set float voltage comp to %d\n", chip->float_voltage_comp);
 	}
 
 	smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
@@ -6583,9 +6620,9 @@ static irqreturn_t batt_cool_handler(int irq, void *_chip)
 
 	int rc;
 	/* set the cool float voltage compensation ,set the cool float voltage to 4.4V*/
-	rc = smbchg_float_voltage_comp_set(chip,0);
+	rc = smbchg_float_voltage_comp_set(chip, 0);
 	if (rc < 0)
-		dev_err(chip->dev, "Couldn't set float voltage comp rc = %d\n",rc);
+		dev_err(chip->dev, "Couldn't set float voltage comp rc = %d\n", rc);
 
 	smbchg_read(chip, &reg, chip->bat_if_base + RT_STS, 1);
 	chip->batt_cool = !!(reg & COLD_BAT_SOFT_BIT);

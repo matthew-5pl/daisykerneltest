@@ -1,5 +1,4 @@
-/* Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -61,11 +60,11 @@ static void scm_disable_sdi(void);
 * There is no API from TZ to re-enable the registers.
 * So the SDI cannot be re-enabled when it already by-passed.
 */
-	#ifdef FACTORY_VERSION_ENABLE
-	static int download_mode = 1;
-	#else
-	static int download_mode = 0;
-	#endif
+    #ifdef FACTORY_VERSION_ENABLE
+    static int download_mode = 1;
+    #else
+    static int download_mode;
+    #endif
 #else
 static const int download_mode;
 #endif
@@ -83,10 +82,10 @@ static struct kobject dload_kobj;
 static void *dload_type_addr;
 
 /*lancelot add for reboot dl*/
-static int hq_reboot_dl = 0;
+static int hq_reboot_dl;
 
-module_param_named(reboot_dl_set,hq_reboot_dl,int,0644);
-MODULE_PARM_DESC(reboot_dl_set,"for hq reboot enter dl mode");
+module_param_named(reboot_dl_set, hq_reboot_dl, int, 0644);
+MODULE_PARM_DESC(reboot_dl_set, "for hq reboot enter dl mode");
 /*lancelot add end*/
 
 static int dload_set(const char *val, struct kernel_param *kp);
@@ -289,8 +288,6 @@ static void msm_restart_prepare(const char *cmd)
 	 * Write download mode flags if restart_mode says so
 	 * Kill download mode if master-kill switch is set
 	 */
-
-
 
 	set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD || hq_reboot_dl));

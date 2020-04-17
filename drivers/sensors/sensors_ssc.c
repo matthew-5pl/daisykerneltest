@@ -20,7 +20,6 @@
 #include <linux/fs.h>
 #include <linux/of_device.h>
 #include <asm/arch_timer.h>
-#include <asm/io.h>
 #include <linux/uaccess.h>
 
 #include <linux/kernel.h>
@@ -28,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
+#include <linux/io.h>
 
 #include <soc/qcom/subsystem_restart.h>
 

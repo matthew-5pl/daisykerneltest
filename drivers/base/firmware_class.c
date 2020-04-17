@@ -1356,7 +1356,7 @@ static int _request_firmware(struct fw_desc *desc)
  **/
 int
 request_firmware(const struct firmware **firmware_p, const char *name,
-                 struct device *device)
+				struct device *device)
 {
 	struct fw_desc desc;
 	int ret;

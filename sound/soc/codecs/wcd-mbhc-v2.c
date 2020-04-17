@@ -1,5 +1,5 @@
 /* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018 XiaoMi, Inc.
+ * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -77,12 +77,12 @@ static struct switch_dev accdet_data;
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
-	printk("[%s]=====status[%d]type[%d]\n",__FUNCTION__,status,jack->jack->type);
+	printk("[%s]=====status[%d]type[%d]\n", __FUNCTION__, status, jack->jack->type);
 	if (!status && (jack->jack->type&WCD_MBHC_JACK_MASK)) {
-		switch_set_state(&accdet_data,0);
+		switch_set_state(&accdet_data, 0);
 		is_jack_insert = false;
 	} else if (jack->jack->type&WCD_MBHC_JACK_MASK) {
-		switch_set_state(&accdet_data,status);
+		switch_set_state(&accdet_data, status);
 		is_jack_insert = true;
 	}
 	snd_soc_jack_report(jack, status, mask);
@@ -702,12 +702,12 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 		} else if (jack_type == SND_JACK_ANC_HEADPHONE)
 			mbhc->current_plug = MBHC_PLUG_TYPE_ANC_HEADPHONE;
 
-		 if (jack_type == SND_JACK_UNSUPPORTED) {
-			printk("%s:jack_type is 0x100, off pa to compute imp\n",__func__);
+		if (jack_type == SND_JACK_UNSUPPORTED) {
+			printk("%s:jack_type is 0x100, off pa to compute imp\n", __func__);
 			wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
-		 }
+		}
 
-		 if (mbhc->mbhc_cb->hph_pa_on_status)
+		if (mbhc->mbhc_cb->hph_pa_on_status)
 			is_pa_on = mbhc->mbhc_cb->hph_pa_on_status(codec);
 
 		if (mbhc->impedance_detect &&
@@ -736,25 +736,25 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				__func__);
 			}
 			if ((mbhc->zl > CAM_HS_IMPED &&
-				mbhc->zl < MAX_IMPED) &&
+				 mbhc->zl < MAX_IMPED) &&
 				(mbhc->zr > CAM_HS_IMPED &&
-				mbhc->zr < MAX_IMPED) &&
+				 mbhc->zr < MAX_IMPED) &&
 				(jack_type == SND_JACK_UNSUPPORTED)) {
 					jack_type = SND_JACK_HEADSET;
 					mbhc->current_plug = MBHC_PLUG_TYPE_HEADSET;
 					mbhc->jiffies_atreport = jiffies;
 					if (mbhc->hph_status) {
 						mbhc->hph_status &= ~(SND_JACK_HEADSET |
-						SND_JACK_LINEOUT |
-						SND_JACK_UNSUPPORTED);
+											  SND_JACK_LINEOUT |
+											  SND_JACK_UNSUPPORTED);
 						wcd_mbhc_jack_report(mbhc,
-						&mbhc->headset_jack,
-						mbhc->hph_status,
-						WCD_MBHC_JACK_MASK);
+											 &mbhc->headset_jack,
+											 mbhc->hph_status,
+											 WCD_MBHC_JACK_MASK);
 					}
 			}
 			printk("%s: [%d,%d] jack type changed by IMPED\n",
-			__func__,mbhc->zl,mbhc->zr);
+				   __func__, mbhc->zl, mbhc->zr);
 		}
 
 		mbhc->hph_status |= jack_type;
@@ -883,7 +883,7 @@ static void wcd_mbhc_find_plug_and_report(struct wcd_mbhc *mbhc,
 						SND_JACK_HEADPHONE);
 			if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET)
 				wcd_mbhc_report_plug(mbhc, 0, SND_JACK_HEADSET);
-		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_UNSUPPORTED);
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
 	} else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
 		if (mbhc->mbhc_cfg->enable_anc_mic_detect)
 			anc_mic_found = wcd_mbhc_detect_anc_plug_type(mbhc);
@@ -2055,10 +2055,10 @@ static irqreturn_t wcd_mbhc_release_handler(int irq, void *data)
 	 */
 	if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADPHONE) {
 		wcd_mbhc_find_plug_and_report(mbhc, MBHC_PLUG_TYPE_HEADSET);
-		 wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
- 				0, WCD_MBHC_JACK_MASK);
- 		msleep(100);
-		 wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
+		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
+							 0, WCD_MBHC_JACK_MASK);
+		msleep(100);
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
 		goto exit;
 
 	}
@@ -2439,8 +2439,8 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	accdet_data.state = 0;
 	ret = switch_dev_register(&accdet_data);
 	if (ret) {
-		dev_err(card->dev,"[Accdet]switch_dev_register returned:%d!\n", ret);
-		return -1;
+		dev_err(card->dev, "[Accdet]switch_dev_register returned:%d!\n", ret);
+		return ret;
 
 	}
 

@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 MediaTek Inc.
- * Copyright (C) 2018 XiaoMi, Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -45,12 +44,12 @@ enum hardware_id{
 	HWID_DDR = 0x10,
 	HWID_EMMC,
 	HWID_NAND,
-
+	
 	HWID_LCM = 0x20,
 	HWID_SUB_LCM,
 	HWID_BIAS_IC,
 	HWID_CTP,
-
+	
 	HWID_MAIN_CAM = 0x30,
 	HWID_MAIN_CAM_2,
 	HWID_SUB_CAM,
@@ -97,8 +96,8 @@ struct hw_info{
 	enum hardware_id hw_id;
 	struct attribute attr;
 	unsigned int hw_exist;
-
-	char *hw_device_name;
+//	const char *hw_type_name;
+	char * hw_device_name;
 };
 
 
